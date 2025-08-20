@@ -66,6 +66,15 @@ export const BEDROCK_MODELS = [
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
 ];
 
+export const OPENAI_MODELS = [
+  'gpt-4',
+  'gpt-4-turbo',
+  'gpt-4o',
+  'gpt-3.5-turbo',
+  'GPT-5',
+  'kimi-k2-250711'
+]
+
 // Interface for Tool
 export interface Tool {
   name: string;
@@ -89,6 +98,11 @@ export interface Agent {
   sys_prompt: string;
   tools: Tool[];
   envs?: string;
+  extras?: {
+    base_url?: string;
+    api_key?: string;
+    [key: string]: any;
+  };
   created_at?: string;
   updated_at?: string;
 }

@@ -18,7 +18,7 @@ import {
   EditOutlined, 
   DeleteOutlined
 } from '@ant-design/icons';
-import { AGENT_TYPES, MODEL_PROVIDERS, BEDROCK_MODELS, TOOL_TYPES } from '../../services/api';
+import { AGENT_TYPES, MODEL_PROVIDERS, BEDROCK_MODELS, TOOL_TYPES, OPENAI_MODELS } from '../../services/api';
 import type { Agent, Tool } from '../../services/api';
 import { useAgentStore } from '../../store/agentStore';
 
@@ -75,7 +75,8 @@ export const AgentManager: React.FC = () => {
       // Set form values
       editForm.setFieldsValue({
         ...selectedAgent,
-        tools: toolNames
+        tools: toolNames,
+        extras: selectedAgent.extras || {}
       });
     }
   }, [selectedAgent, editModalVisible, editForm]);
@@ -85,9 +86,11 @@ export const AgentManager: React.FC = () => {
     if ('model_provider' in changedValues) {
       // Reset model_id when model_provider changes
       if (changedValues.model_provider === MODEL_PROVIDERS.BEDROCK) {
-        form.setFieldsValue({ model_id: BEDROCK_MODELS[0] });
+        form.setFieldsValue({ model_id: BEDROCK_MODELS[0], extras: {} });
+      } else if (changedValues.model_provider === MODEL_PROVIDERS.OPENAI) {
+        form.setFieldsValue({ model_id: OPENAI_MODELS[0], extras: { base_url: '', api_key: '' } });
       } else {
-        form.setFieldsValue({ model_id: 'custom' });
+        form.setFieldsValue({ model_id: 'custom', extras: {} });
       }
     }
   };
@@ -372,11 +375,42 @@ export const AgentManager: React.FC = () => {
                 BEDROCK_MODELS.map((model, index) => (
                   <Option key={index} value={model}>{model}</Option>
                 ))
+              ) : getFieldValue('model_provider') === MODEL_PROVIDERS.OPENAI ? (
+                OPENAI_MODELS.map((model, index) => (
+                  <Option key={index} value={model}>{model}</Option>
+                ))
               ) : (
                 <Option value="custom">Custom Model</Option>
               )}
             </Select>
           </Form.Item>
+        )}
+      </Form.Item>
+      
+      <Form.Item
+        noStyle
+        shouldUpdate={(prevValues, currentValues) => prevValues.model_provider !== currentValues.model_provider}
+      >
+        {({ getFieldValue }) => (
+          getFieldValue('model_provider') === MODEL_PROVIDERS.OPENAI && (
+            <>
+              <Form.Item
+                name={['extras', 'base_url']}
+                label="Base URL"
+                rules={[{ required: true, message: '请输入Base URL' }]}
+              >
+                <Input placeholder="例如: https://api.openai.com/v1" />
+              </Form.Item>
+              
+              <Form.Item
+                name={['extras', 'api_key']}
+                label="API Key"
+                rules={[{ required: true, message: '请输入API Key' }]}
+              >
+                <Input.Password placeholder="请输入API Key" />
+              </Form.Item>
+            </>
+          )
         )}
       </Form.Item>
       
@@ -457,6 +491,12 @@ export const AgentManager: React.FC = () => {
         <h3 style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: '10px' }}>模型信息</h3>
         <p><strong>模型提供商:</strong> {getModelProviderName(selectedAgent.model_provider)}</p>
         <p><strong>模型ID:</strong> {selectedAgent.model_id}</p>
+        {selectedAgent.model_provider === MODEL_PROVIDERS.OPENAI && selectedAgent.extras && (
+          <>
+            <p><strong>Base URL:</strong> {selectedAgent.extras.base_url}</p>
+            <p><strong>API Key:</strong> {'*'.repeat(10)}</p>
+          </>
+        )}
       </div>
       
       <div style={{ marginBottom: '20px' }}>
@@ -648,11 +688,42 @@ export const AgentManager: React.FC = () => {
                       BEDROCK_MODELS.map((model, index) => (
                         <Option key={index} value={model}>{model}</Option>
                       ))
+                    ) : getFieldValue('model_provider') === MODEL_PROVIDERS.OPENAI ? (
+                      OPENAI_MODELS.map((model, index) => (
+                        <Option key={index} value={model}>{model}</Option>
+                      ))
                     ) : (
                       <Option value="custom">Custom Model</Option>
                     )}
                   </Select>
                 </Form.Item>
+              )}
+            </Form.Item>
+            
+            <Form.Item
+              noStyle
+              shouldUpdate={(prevValues, currentValues) => prevValues.model_provider !== currentValues.model_provider}
+            >
+              {({ getFieldValue }) => (
+                getFieldValue('model_provider') === MODEL_PROVIDERS.OPENAI && (
+                  <>
+                    <Form.Item
+                      name={['extras', 'base_url']}
+                      label="Base URL"
+                      rules={[{ required: true, message: '请输入Base URL' }]}
+                    >
+                      <Input placeholder="例如: https://api.openai.com/v1" />
+                    </Form.Item>
+                    
+                    <Form.Item
+                      name={['extras', 'api_key']}
+                      label="API Key"
+                      rules={[{ required: true, message: '请输入API Key' }]}
+                    >
+                      <Input.Password placeholder="请输入API Key" />
+                    </Form.Item>
+                  </>
+                )
               )}
             </Form.Item>
             

@@ -515,6 +515,7 @@ export class AgentXStack extends cdk.Stack {
     const httpListener = lb.addListener('HttpListener', {
       port: 80,
       open: true,
+      protocol: elbv2.ApplicationProtocol.HTTP,
       defaultAction: elbv2.ListenerAction.forward([feTargetGroup]),
     });
 

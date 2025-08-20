@@ -111,6 +111,7 @@ class AgentPO(BaseModel):
     sys_prompt: str = "You are a helpful assistant."
     tools: List[AgentTool] = []
     envs: str = ""
+    extras: Optional[dict] = None
 
     def __repr__(self):
         return f"AgentPO(name={self.name}, display_name={self.display_name} description={self.description}, " \
@@ -191,20 +192,24 @@ class AgentPOService:
 
         # write to DynamoDB
         table = self.dynamodb.Table(self.dynamodb_table_name)
-        table.put_item(
-            Item={
-                'id': agent_po.id,
-                'name': agent_po.name,
-                'display_name': agent_po.display_name,
-                'description': agent_po.description,
-                'agent_type': agent_po.agent_type.value,
-                'model_provider': agent_po.model_provider.value,
-                'model_id': agent_po.model_id,
-                'sys_prompt': agent_po.sys_prompt,
-                'tools': [tool.model_dump_json() for tool in agent_po.tools],  # Convert tools to JSON string
-                'envs': agent_po.envs
-            }
-        )
+        item = {
+            'id': agent_po.id,
+            'name': agent_po.name,
+            'display_name': agent_po.display_name,
+            'description': agent_po.description,
+            'agent_type': agent_po.agent_type.value,
+            'model_provider': agent_po.model_provider.value,
+            'model_id': agent_po.model_id,
+            'sys_prompt': agent_po.sys_prompt,
+            'tools': [tool.model_dump_json() for tool in agent_po.tools],  # Convert tools to JSON string
+            'envs': agent_po.envs
+        }
+        
+        # Add extras if it exists
+        if agent_po.extras:
+            item['extras'] = agent_po.extras
+            
+        table.put_item(Item=item)
 
     def get_agent(self, id: str) -> Optional[AgentPO]:
         """
@@ -362,20 +367,52 @@ class AgentPOService:
                 print(f"Unsupported tool type: {t.type}")
         
 
-        boto_config = BotocoreConfig(
-            retries={"max_attempts": kwargs['max_attempts'] if 'max_attempts' in kwargs else 10, "mode": "standard"},
-            connect_timeout=kwargs['connect_timeout'] if 'connect_timeout' in kwargs else 10,
-            read_timeout=kwargs['read_timeout'] if 'read_timeout' in kwargs else 900
-        )
+        # Choose the appropriate model based on the provider
+        if agent.model_provider == ModelProvider.bedrock:
+            boto_config = BotocoreConfig(
+                retries={"max_attempts": kwargs['max_attempts'] if 'max_attempts' in kwargs else 10, "mode": "standard"},
+                connect_timeout=kwargs['connect_timeout'] if 'connect_timeout' in kwargs else 10,
+                read_timeout=kwargs['read_timeout'] if 'read_timeout' in kwargs else 900
+            )
 
-        bedrock_model = BedrockModel(
-            model_id=agent.model_id,
-            boto_client_config=boto_config,
-        )
+            model = BedrockModel(
+                model_id=agent.model_id,
+                boto_client_config=boto_config,
+            )
+        elif agent.model_provider == ModelProvider.openai:
+            # For OpenAI, use the extras field to get base_url and api_key
+            from strands.models.openai import OpenAIModel
+            
+            base_url = None
+            api_key = None
+            
+            if agent.extras:
+                base_url = agent.extras.get('base_url')
+                api_key = agent.extras.get('api_key')
+            
+            model = OpenAIModel(
+                client_args={
+                    "api_key": api_key,
+                    "base_url": base_url
+                },
+                model_id=agent.model_id,
+            )
+        else:
+            # Default to Bedrock for now
+            boto_config = BotocoreConfig(
+                retries={"max_attempts": kwargs['max_attempts'] if 'max_attempts' in kwargs else 10, "mode": "standard"},
+                connect_timeout=kwargs['connect_timeout'] if 'connect_timeout' in kwargs else 10,
+                read_timeout=kwargs['read_timeout'] if 'read_timeout' in kwargs else 900
+            )
+
+            model = BedrockModel(
+                model_id=agent.model_id,
+                boto_client_config=boto_config,
+            )
 
         return Agent(
             system_prompt=agent.sys_prompt,
-            model=bedrock_model,
+            model=model,
             tools=tools
         )
 
@@ -409,7 +446,8 @@ class AgentPOService:
             model_id=item['model_id'],
             sys_prompt=item['sys_prompt'],
             tools=[json_to_agent_tool(json.loads(tool)) for tool in item['tools'] ],
-            envs=item.get('envs', '')
+            envs=item.get('envs', ''),
+            extras=item.get('extras')
         )
     
 
@@ -441,20 +479,50 @@ def agent_as_tool(agent: AgentPO, **kwargs):
                 except (ImportError, AttributeError) as e:
                     print(f"Error loading tool {t.name}: {e}")
 
-        boto_config = BotocoreConfig(
-            retries={"max_attempts": kwargs['max_attempts'] if 'max_attempts' in kwargs else 10, "mode": "standard"},
-            connect_timeout=kwargs['connect_timeout'] if 'connect_timeout' in kwargs else 10,
-            read_timeout=kwargs['read_timeout'] if 'read_timeout' in kwargs else 900
-        )
+        # Choose the appropriate model based on the provider
+        if agent.model_provider == ModelProvider.bedrock:
+            boto_config = BotocoreConfig(
+                retries={"max_attempts": kwargs['max_attempts'] if 'max_attempts' in kwargs else 10, "mode": "standard"},
+                connect_timeout=kwargs['connect_timeout'] if 'connect_timeout' in kwargs else 10,
+                read_timeout=kwargs['read_timeout'] if 'read_timeout' in kwargs else 900
+            )
 
-        bedrock_model = BedrockModel(
-            model_id=agent.model_id,
-            boto_client_config=boto_config,
-        )
+            model = BedrockModel(
+                model_id=agent.model_id,
+                boto_client_config=boto_config,
+            )
+        elif agent.model_provider == ModelProvider.openai:
+            # For OpenAI, use the extras field to get base_url and api_key
+            from strands.models import OpenAIModel
+            
+            base_url = None
+            api_key = None
+            
+            if agent.extras:
+                base_url = agent.extras.get('base_url')
+                api_key = agent.extras.get('api_key')
+            
+            model = OpenAIModel(
+                model_id=agent.model_id,
+                api_key=api_key,
+                base_url=base_url
+            )
+        else:
+            # Default to Bedrock for now
+            boto_config = BotocoreConfig(
+                retries={"max_attempts": kwargs['max_attempts'] if 'max_attempts' in kwargs else 10, "mode": "standard"},
+                connect_timeout=kwargs['connect_timeout'] if 'connect_timeout' in kwargs else 10,
+                read_timeout=kwargs['read_timeout'] if 'read_timeout' in kwargs else 900
+            )
+
+            model = BedrockModel(
+                model_id=agent.model_id,
+                boto_client_config=boto_config,
+            )
 
         agent_instance = Agent(
             system_prompt=agent.sys_prompt,
-            model=bedrock_model,
+            model=model,
             tools= tools
         )
 

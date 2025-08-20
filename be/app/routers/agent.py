@@ -72,6 +72,7 @@ async def create_agent(request: Request) -> AgentPO:
         sys_prompt=agent.get("sys_prompt"),
         tools= tools,
         envs=agent.get("envs", ""),
+        extras=agent.get("extras"),
     )
     agent_service.add_agent(agent_po)
     return agent_po
