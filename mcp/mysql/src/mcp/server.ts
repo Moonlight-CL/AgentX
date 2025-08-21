@@ -203,7 +203,17 @@ export class MySQLMCPServer {
     sql: string,
     database?: string,
   ): Promise<CallToolResult> {
+    
     try {
+
+      // validate sql and check if it is select clause
+      const operations = ['update', 'insert', 'delete', 'drop', 'truncate', 'create', 'alter'];
+      if(!sql || operations.some(op => sql.trim().toLowerCase().startsWith(op))) {
+        return {
+          content: [ {type: "text", text: "Only select queries are allowed"} ],
+        };
+      };
+      
       // If database is specified, use it
       if (database) {
         await this.connection.query("USE `" + database + "`");
