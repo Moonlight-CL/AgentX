@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.115.13",
-    "strands-agents[openai]>=1.1.0",
-    "strands-agents-tools[agent_core_browser,agent_core_code_interpreter]",
+    "strands-agents[openai]>=1.5.0",
+    "strands-agents-tools[agent_core_browser,agent_core_code_interpreter]>=0.2.2",
     "uvicorn>=0.34.3",
     "websockets>=15.0.1",
 ]

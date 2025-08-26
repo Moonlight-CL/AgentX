@@ -13,6 +13,7 @@ usage() {
   echo "  --no-redshift-mcp           Disable Redshift MCP server deployment"
   echo "  --no-duckdb-mcp             Disable DuckDB MCP server deployment"
   echo "  --no-opensearch-mcp         Disable OpenSearch MCP server deployment"
+  echo "  --no-aws-db-mcp             Disable AWS DB MCP server deployment"
   echo "  --no-dynamodb-tables        Disable creation of DynamoDB tables for agent and MCP services"
   echo "  --help                      Display this help message"
   exit 1
@@ -25,6 +26,7 @@ DEPLOY_MYSQL_MCP=true
 DEPLOY_REDSHIFT_MCP=true
 DEPLOY_DUCKDB_MCP=true
 DEPLOY_OPENSEARCH_MCP=true
+DEPLOY_AWS_DB_MCP=true
 CREATE_DYNAMODB_TABLES=true
 
 # Parse arguments
@@ -52,6 +54,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-opensearch-mcp)
       DEPLOY_OPENSEARCH_MCP=false
+      shift
+      ;;
+    --no-aws-db-mcp)
+      DEPLOY_AWS_DB_MCP=false
       shift
       ;;
     --no-dynamodb-tables)
@@ -82,6 +88,7 @@ echo "MySQL MCP server deployment: $([ "$DEPLOY_MYSQL_MCP" = true ] && echo "Ena
 echo "Redshift MCP server deployment: $([ "$DEPLOY_REDSHIFT_MCP" = true ] && echo "Enabled" || echo "Disabled")"
 echo "DuckDB MCP server deployment: $([ "$DEPLOY_DUCKDB_MCP" = true ] && echo "Enabled" || echo "Disabled")"
 echo "OpenSearch MCP server deployment: $([ "$DEPLOY_OPENSEARCH_MCP" = true ] && echo "Enabled" || echo "Disabled")"
+echo "AWS DB MCP server deployment: $([ "$DEPLOY_AWS_DB_MCP" = true ] && echo "Enabled" || echo "Disabled")"
 echo "DynamoDB tables creation: $([ "$CREATE_DYNAMODB_TABLES" = true ] && echo "Enabled" || echo "Disabled")"
 echo "Agent Schedule functionality: Enabled"
 
@@ -129,6 +136,11 @@ fi
 if [ "$DEPLOY_OPENSEARCH_MCP" = false ]; then
   CDK_PARAMS="$CDK_PARAMS -c deployOpenSearchMcpServer=false"
   export DEPLOY_OPENSEARCH_MCP=false
+fi
+
+if [ "$DEPLOY_AWS_DB_MCP" = false ]; then
+  CDK_PARAMS="$CDK_PARAMS -c deployAwsDbMcpServer=false"
+  export DEPLOY_AWS_DB_MCP=false
 fi
 
 if [ "$CREATE_DYNAMODB_TABLES" = false ]; then

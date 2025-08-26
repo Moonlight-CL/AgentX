@@ -135,5 +135,42 @@
         ]
       }
     ]
+  },
+  "availability-zones:account=546764996900:region=cn-northwest-1": [
+    "cn-northwest-1a",
+    "cn-northwest-1b",
+    "cn-northwest-1c"
+  ],
+  "vpc-provider:account=546764996900:filter.vpc-id=vpc-06d0d73ade28c9d72:region=cn-northwest-1:returnAsymmetricSubnets=true": {
+    "vpcId": "vpc-06d0d73ade28c9d72",
+    "vpcCidrBlock": "10.0.0.0/20",
+    "ownerAccountId": "546764996900",
+    "availabilityZones": [],
+    "subnetGroups": [
+      {
+        "name": "Public",
+        "type": "Public",
+        "subnets": [
+          {
+            "subnetId": "subnet-09cdf92ace44b12eb",
+            "cidr": "10.0.0.0/24",
+            "availabilityZone": "cn-northwest-1a",
+            "routeTableId": "rtb-067b6f3c6f411c74b"
+          },
+          {
+            "subnetId": "subnet-05ff42a4868d8a699",
+            "cidr": "10.0.1.0/24",
+            "availabilityZone": "cn-northwest-1b",
+            "routeTableId": "rtb-067b6f3c6f411c74b"
+          },
+          {
+            "subnetId": "subnet-07689db3fa2ad100e",
+            "cidr": "10.0.2.0/24",
+            "availabilityZone": "cn-northwest-1c",
+            "routeTableId": "rtb-067b6f3c6f411c74b"
+          }
+        ]
+      }
+    ]
   }
 }

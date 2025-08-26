@@ -1,0 +1,123 @@
+2025-08-25 16:16:20,070 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-25 16:16:20,070 - aws-db-evaluation-mcp-server - INFO - Application started with StreamableHTTP session manager!
+2025-08-25 16:16:55,152 - aws-db-evaluation-mcp-server - INFO - Application shutting down...
+2025-08-25 16:16:55,152 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down
+2025-08-25 18:24:07,902 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-25 18:24:07,902 - aws-db-evaluation-mcp-server - INFO - Application started with StreamableHTTP session manager!
+2025-08-25 18:25:44,364 - aws-db-evaluation-mcp-server - INFO - Application shutting down...
+2025-08-25 18:25:44,365 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down
+2025-08-26 00:25:02,826 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-26 00:25:02,826 - aws-db-evaluation-mcp-server - INFO - Application started with StreamableHTTP session manager!
+2025-08-26 00:31:39,578 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: 6168def3f701431e8a683c45a5a6373b
+2025-08-26 00:31:39,592 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-26 00:31:39,592 - aws-db-evaluation-mcp-server - INFO - List available tools...
+2025-08-26 00:31:44,119 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2025-08-26 00:31:44,141 - botocore.credentials - INFO - Found credentials in shared credentials file: ~/.aws/credentials
+2025-08-26 00:31:44,301 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取定价信息...
+2025-08-26 00:31:44,301 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取区域 us-west-2 的所有RDS MySQL实例定价...
+2025-08-26 00:31:53,213 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.large，将继续处理
+2025-08-26 00:31:53,215 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.8xlarge，将继续处理
+2025-08-26 00:32:02,092 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.24xlarge，将继续处理
+2025-08-26 00:32:02,095 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.12xlarge，将继续处理
+2025-08-26 00:32:02,096 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.2xlarge，将继续处理
+2025-08-26 00:32:02,097 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.4xlarge，将继续处理
+2025-08-26 00:32:02,097 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.32xlarge，将继续处理
+2025-08-26 00:32:02,097 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.2xlarge，将继续处理
+2025-08-26 00:32:02,097 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.4xlarge，将继续处理
+2025-08-26 00:32:05,333 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.8xlarge，将继续处理
+2025-08-26 00:32:05,333 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.16xlarge，将继续处理
+2025-08-26 00:32:05,333 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.xlarge，将继续处理
+2025-08-26 00:32:05,334 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.xlarge，将继续处理
+2025-08-26 00:32:05,335 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.16xlarge，将继续处理
+2025-08-26 00:32:05,336 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 定价缓存完成，共缓存 204 个实例类型的定价信息
+2025-08-26 00:32:05,336 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取区域 us-west-2 的所有存储类型定价...
+2025-08-26 00:32:05,858 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取io1和io2的IOPS定价...
+2025-08-26 00:32:06,790 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 获取到 io2 IOPS定价: $0.1/IOPS/月
+2025-08-26 00:32:06,791 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储类型 gp2 定价: 存储=$0.115/GB/月, IOPS=$0/IOPS/月, 吞吐量=$0/MB/s/月
+2025-08-26 00:32:06,791 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储类型 gp3 定价: 存储=$0.115/GB/月, IOPS=$0/IOPS/月, 吞吐量=$0/MB/s/月
+2025-08-26 00:32:06,791 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储类型 io1 定价: 存储=$0.125/GB/月, IOPS=$0/IOPS/月, 吞吐量=$0/MB/s/月
+2025-08-26 00:32:06,791 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储类型 io2 定价: 存储=$0.125/GB/月, IOPS=$0.1/IOPS/月, 吞吐量=$0/MB/s/月
+2025-08-26 00:32:06,791 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储类型 magnetic 定价: 存储=$0.1/GB/月, IOPS=$0/IOPS/月, 吞吐量=$0/MB/s/月
+2025-08-26 00:32:06,791 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储定价缓存完成，共处理 5 个定价项
+2025-08-26 00:32:06,792 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取区域 us-west-2 的Aurora存储定价...
+2025-08-26 00:32:07,028 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Aurora存储单价: $0.225/GB/月
+2025-08-26 00:32:07,028 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Aurora存储定价缓存完成，共处理 1 个定价项
+2025-08-26 00:32:07,827 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取Aurora集群信息...
+2025-08-26 00:32:08,794 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 找到Aurora集群: my-asv2, Primary节点: my-asv2-instance-1, 成员数: 2
+2025-08-26 00:32:08,794 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 找到Aurora集群: my-dba, Primary节点: my-dba-instance-1, 成员数: 1
+2025-08-26 00:32:08,794 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 共缓存 2 个Aurora MySQL集群
+2025-08-26 00:32:10,710 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 实例 rds-m-test 存储信息: 类型=gp3, 分配=200GB, 剩余=191.6348648071289GB, IOPS=3000, 吞吐量=125MB/s
+2025-08-26 00:32:10,710 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 跳过实例 testdb (类型: db.t3.micro)
+2025-08-26 00:32:10,710 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 找到 1 个符合条件的RDS MySQL实例
+2025-08-26 00:32:10,711 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 跳过 1 个db.t类型的实例
+2025-08-26 00:32:10,711 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Aurora存储定价缓存已存在，跳过重复获取
+2025-08-26 00:32:10,711 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 使用Primary节点 rds-m-test 的实际使用存储: 8.365135192871094GB
+2025-08-26 00:32:10,711 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 独立实例 rds-m-test，Aurora存储成本基于实际使用量(8.365135192871094GB)计算
+2025-08-26 00:32:10,711 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 集群 rds-m-test Aurora存储成本: Primary节点存储=8.365135192871094GB, 总成本=$1.88/月, Multi-AZ=False, Read Replicas=False, RDS MySQL集群=False
+2025-08-26 00:32:10,711 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 分析实例: rds-m-test
+2025-08-26 00:32:10,712 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 实例 rds-m-test RDS总MRR: 实例MRR=$71.03 + 存储MRR=$23.0 = $94.03
+2025-08-26 00:32:10,712 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 为实例 rds-m-test 计算Aurora r7g转换成本
+2025-08-26 00:32:11,182 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Aurora MySQL db.r7g.large RI定价: $0.2128/小时
+2025-08-26 00:32:11,182 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Primary节点 rds-m-test Aurora r7g 存储成本: $1.88
+2025-08-26 00:32:11,182 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 为实例 rds-m-test 计算Aurora r8g转换成本
+2025-08-26 00:32:11,437 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Aurora MySQL db.r8g.large RI定价: $0.185/小时
+2025-08-26 00:32:11,437 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Primary节点 rds-m-test Aurora r8g 存储成本: $1.88
+2025-08-26 00:32:11,438 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 为实例 rds-m-test 计算RDS替换 r7g成本
+2025-08-26 00:32:11,438 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 为实例 rds-m-test 计算RDS替换 r8g成本
+2025-08-26 00:38:36,866 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: 769d25ffa32240639bb73038cfff2014
+2025-08-26 00:38:36,950 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-26 00:38:36,950 - aws-db-evaluation-mcp-server - INFO - List available tools...
+2025-08-26 00:38:43,007 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2025-08-26 00:38:43,022 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取定价信息...
+2025-08-26 00:38:43,022 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取区域 us-west-2 的所有RDS MySQL实例定价...
+2025-08-26 00:38:46,433 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.large，将继续处理
+2025-08-26 00:38:46,433 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.8xlarge，将继续处理
+2025-08-26 00:38:51,028 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.24xlarge，将继续处理
+2025-08-26 00:38:51,030 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.12xlarge，将继续处理
+2025-08-26 00:38:51,031 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.2xlarge，将继续处理
+2025-08-26 00:38:51,032 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.4xlarge，将继续处理
+2025-08-26 00:38:51,032 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.32xlarge，将继续处理
+2025-08-26 00:38:51,032 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.2xlarge，将继续处理
+2025-08-26 00:38:51,033 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.4xlarge，将继续处理
+2025-08-26 00:38:53,241 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.8xlarge，将继续处理
+2025-08-26 00:38:53,241 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.16xlarge，将继续处理
+2025-08-26 00:38:53,241 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2iedn.xlarge，将继续处理
+2025-08-26 00:38:53,242 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.xlarge，将继续处理
+2025-08-26 00:38:53,243 - db_evaluation_server.rds_aurora_pricing_analyzer - WARNING - 未知实例族类型: db.x2g.16xlarge，将继续处理
+2025-08-26 00:38:53,244 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 定价缓存完成，共缓存 204 个实例类型的定价信息
+2025-08-26 00:38:53,244 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取区域 us-west-2 的所有存储类型定价...
+2025-08-26 00:38:53,502 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取io1和io2的IOPS定价...
+2025-08-26 00:38:53,988 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 获取到 io2 IOPS定价: $0.1/IOPS/月
+2025-08-26 00:38:53,988 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储类型 gp2 定价: 存储=$0.115/GB/月, IOPS=$0/IOPS/月, 吞吐量=$0/MB/s/月
+2025-08-26 00:38:53,988 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储类型 gp3 定价: 存储=$0.115/GB/月, IOPS=$0/IOPS/月, 吞吐量=$0/MB/s/月
+2025-08-26 00:38:53,988 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储类型 io1 定价: 存储=$0.125/GB/月, IOPS=$0/IOPS/月, 吞吐量=$0/MB/s/月
+2025-08-26 00:38:53,988 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储类型 io2 定价: 存储=$0.125/GB/月, IOPS=$0.1/IOPS/月, 吞吐量=$0/MB/s/月
+2025-08-26 00:38:53,988 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储类型 magnetic 定价: 存储=$0.1/GB/月, IOPS=$0/IOPS/月, 吞吐量=$0/MB/s/月
+2025-08-26 00:38:53,988 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 存储定价缓存完成，共处理 5 个定价项
+2025-08-26 00:38:53,988 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取区域 us-west-2 的Aurora存储定价...
+2025-08-26 00:38:54,245 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Aurora存储单价: $0.225/GB/月
+2025-08-26 00:38:54,245 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Aurora存储定价缓存完成，共处理 1 个定价项
+2025-08-26 00:38:55,066 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 开始获取Aurora集群信息...
+2025-08-26 00:38:56,001 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 找到Aurora集群: my-asv2, Primary节点: my-asv2-instance-1, 成员数: 2
+2025-08-26 00:38:56,002 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 找到Aurora集群: my-dba, Primary节点: my-dba-instance-1, 成员数: 1
+2025-08-26 00:38:56,002 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 共缓存 2 个Aurora MySQL集群
+2025-08-26 00:38:58,008 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 实例 rds-m-test 存储信息: 类型=gp3, 分配=200GB, 剩余=191.6348648071289GB, IOPS=3000, 吞吐量=125MB/s
+2025-08-26 00:38:58,009 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 跳过实例 testdb (类型: db.t3.micro)
+2025-08-26 00:38:58,009 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 找到 1 个符合条件的RDS MySQL实例
+2025-08-26 00:38:58,009 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 跳过 1 个db.t类型的实例
+2025-08-26 00:38:58,009 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Aurora存储定价缓存已存在，跳过重复获取
+2025-08-26 00:38:58,009 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 使用Primary节点 rds-m-test 的实际使用存储: 8.365135192871094GB
+2025-08-26 00:38:58,009 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 独立实例 rds-m-test，Aurora存储成本基于实际使用量(8.365135192871094GB)计算
+2025-08-26 00:38:58,009 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 集群 rds-m-test Aurora存储成本: Primary节点存储=8.365135192871094GB, 总成本=$1.88/月, Multi-AZ=False, Read Replicas=False, RDS MySQL集群=False
+2025-08-26 00:38:58,009 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 分析实例: rds-m-test
+2025-08-26 00:38:58,010 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 实例 rds-m-test RDS总MRR: 实例MRR=$71.03 + 存储MRR=$23.0 = $94.03
+2025-08-26 00:38:58,010 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 为实例 rds-m-test 计算Aurora r7g转换成本
+2025-08-26 00:38:58,263 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Aurora MySQL db.r7g.large RI定价: $0.2128/小时
+2025-08-26 00:38:58,263 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Primary节点 rds-m-test Aurora r7g 存储成本: $1.88
+2025-08-26 00:38:58,263 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 为实例 rds-m-test 计算Aurora r8g转换成本
+2025-08-26 00:38:58,519 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Aurora MySQL db.r8g.large RI定价: $0.185/小时
+2025-08-26 00:38:58,520 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - Primary节点 rds-m-test Aurora r8g 存储成本: $1.88
+2025-08-26 00:38:58,520 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 为实例 rds-m-test 计算RDS替换 r7g成本
+2025-08-26 00:38:58,520 - db_evaluation_server.rds_aurora_pricing_analyzer - INFO - 为实例 rds-m-test 计算RDS替换 r8g成本
+2025-08-26 00:43:20,328 - aws-db-evaluation-mcp-server - INFO - Application shutting down...
+2025-08-26 00:43:20,330 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down

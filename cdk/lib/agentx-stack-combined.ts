@@ -42,6 +42,12 @@ export interface AgentXStackProps extends cdk.StackProps {
   deployOpenSearchMcpServer?: boolean;
 
   /**
+   * Whether to deploy the AWS DB MCP server.
+   * If not provided, defaults to true.
+   */
+  deployAwsDbMcpServer?: boolean;
+
+  /**
    * Whether to create DynamoDB tables used by agent and MCP services.
    * If not provided, defaults to true.
    */
@@ -86,6 +92,7 @@ export class AgentXStack extends cdk.Stack {
     const mcpRedshiftRepository = ecr.Repository.fromRepositoryName(this, 'McpRedshiftRepository', 'agentx/mcp-redshift');
     const mcpDuckDbRepository = ecr.Repository.fromRepositoryName(this, 'McpDuckDbRepository', 'agentx/mcp-duckdb');
     const mcpOpenSearchRepository = ecr.Repository.fromRepositoryName(this, 'McpOpenSearchRepository', 'agentx/mcp-opensearch');
+    const mcpAwsDbRepository = ecr.Repository.fromRepositoryName(this, 'McpAwsDbRepository', 'agentx/mcp-aws-db');
 
     // Create a security group for the load balancer
     const lbSecurityGroup = new ec2.SecurityGroup(this, 'LbSecurityGroup', {
@@ -158,6 +165,11 @@ export class AgentXStack extends cdk.Stack {
     });
     mcpOpenSearchTaskRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'));
 
+    const mcpAwsDbTaskRole = new iam.Role(this, 'McpAwsDbTaskRole', {
+      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
+    });
+    mcpAwsDbTaskRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AdministratorAccess'));
+
     // Create log groups for each service
     const beLogGroup = new logs.LogGroup(this, 'BeLogGroup', {
       logGroupName: '/ecs/agentx-be',
@@ -191,6 +203,12 @@ export class AgentXStack extends cdk.Stack {
 
     const mcpOpenSearchLogGroup = new logs.LogGroup(this, 'McpOpenSearchLogGroup', {
       logGroupName: '/ecs/agentx-mcp-opensearch',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      retention: logs.RetentionDays.ONE_WEEK,
+    });
+
+    const mcpAwsDbLogGroup = new logs.LogGroup(this, 'McpAwsDbLogGroup', {
+      logGroupName: '/ecs/agentx-mcp-aws-db',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       retention: logs.RetentionDays.ONE_WEEK,
     });
@@ -236,6 +254,13 @@ export class AgentXStack extends cdk.Stack {
       cpu: 256,
       executionRole,
       taskRole: mcpOpenSearchTaskRole,
+    });
+
+    const mcpAwsDbTaskDefinition = new ecs.FargateTaskDefinition(this, 'McpAwsDbTaskDefinition', {
+      memoryLimitMiB: 512,
+      cpu: 256,
+      executionRole,
+      taskRole: mcpAwsDbTaskRole,
     });
 
     // Add container definitions for each service
@@ -366,11 +391,33 @@ export class AgentXStack extends cdk.Stack {
       ],
     });
 
+    const mcpAwsDbContainer = mcpAwsDbTaskDefinition.addContainer('McpAwsDbContainer', {
+      image: ecs.ContainerImage.fromEcrRepository(mcpAwsDbRepository),
+      logging: ecs.LogDrivers.awsLogs({
+        streamPrefix: 'mcp-aws-db',
+        logGroup: mcpAwsDbLogGroup,
+      }),
+      environment: {
+        // Add environment variables as needed
+        PYTHON_ENV: 'production',
+        AWS_REGION: this.region,
+      },
+      portMappings: [
+        {
+          name: 'mcp-aws-db-svr',
+          containerPort: 3000,
+          hostPort: 3000,
+          protocol: ecs.Protocol.TCP,
+        },
+      ],
+    });
+
     // Determine whether to deploy MCP servers and create DynamoDB tables based on props
     const deployMysqlMcpServer = props?.deployMysqlMcpServer !== false; // Default to true if not specified
     const deployRedshiftMcpServer = props?.deployRedshiftMcpServer !== false; // Default to true if not specified
     const deployDuckDbMcpServer = props?.deployDuckDbMcpServer !== false; // Default to true if not specified
     const deployOpenSearchMcpServer = props?.deployOpenSearchMcpServer !== false; // Default to true if not specified
+    const deployAwsDbMcpServer = props?.deployAwsDbMcpServer !== false; // Default to true if not specified
     const createDynamoDBTables = props?.createDynamoDBTables !== false; // Default to true if not specified
     
     // Conditionally create DynamoDB tables for agent and MCP services
@@ -511,6 +558,22 @@ export class AgentXStack extends cdk.Stack {
       });
     }
 
+    let mcpAwsDbTargetGroup: elbv2.ApplicationTargetGroup | undefined;
+    if (deployAwsDbMcpServer) {
+      mcpAwsDbTargetGroup = new elbv2.ApplicationTargetGroup(this, 'McpAwsDbTargetGroup', {
+        vpc,
+        port: 3000,
+        protocol: elbv2.ApplicationProtocol.HTTP,
+        targetType: elbv2.TargetType.IP,
+        healthCheck: {
+          path: '/health',
+          interval: cdk.Duration.seconds(60),
+          timeout: cdk.Duration.seconds(5),
+          healthyHttpCodes: '200',
+        },
+      });
+    }
+
     // Create a listener for HTTP with default action to forward to frontend
     const httpListener = lb.addListener('HttpListener', {
       port: 80,
@@ -568,6 +631,16 @@ export class AgentXStack extends cdk.Stack {
         ],
         priority: 50,
         action: elbv2.ListenerAction.forward([mcpOpenSearchTargetGroup]),
+      });
+    }
+
+    if (deployAwsDbMcpServer && mcpAwsDbTargetGroup) {
+      httpListener.addAction('McpAwsDbAction', {
+        conditions: [
+          elbv2.ListenerCondition.pathPatterns(['/mcp-server/aws-db/*']),
+        ],
+        priority: 60,
+        action: elbv2.ListenerAction.forward([mcpAwsDbTargetGroup]),
       });
     }
 
@@ -708,6 +781,31 @@ export class AgentXStack extends cdk.Stack {
       console.log('OpenSearch MCP server deployment is disabled');
     }
 
+    // Conditionally create AWS DB MCP service with Service Connect
+    let mcpAwsDbService: ecs.FargateService | undefined;
+    if (deployAwsDbMcpServer) {
+      mcpAwsDbService = new ecs.FargateService(this, 'McpAwsDbService', {
+        cluster,
+        taskDefinition: mcpAwsDbTaskDefinition,
+        desiredCount: 1,
+        securityGroups: [serviceSecurityGroup],
+        assignPublicIp: false,
+        serviceConnectConfiguration: {
+          namespace: 'agentx.ns',
+          services: [
+            {
+              portMappingName: 'mcp-aws-db-svr',
+              dnsName: 'mcp-aws-db',
+              port: 3000,
+            },
+          ],
+        },
+      });
+      console.log('AWS DB MCP server will be deployed');
+    } else {
+      console.log('AWS DB MCP server deployment is disabled');
+    }
+
     // Register services with target groups
     beTargetGroup.addTarget(beService);
     feTargetGroup.addTarget(feService);
@@ -727,6 +825,10 @@ export class AgentXStack extends cdk.Stack {
     
     if (deployOpenSearchMcpServer && mcpOpenSearchService && mcpOpenSearchTargetGroup) {
       mcpOpenSearchTargetGroup.addTarget(mcpOpenSearchService);
+    }
+    
+    if (deployAwsDbMcpServer && mcpAwsDbService && mcpAwsDbTargetGroup) {
+      mcpAwsDbTargetGroup.addTarget(mcpAwsDbService);
     }
 
     // Output the load balancer DNS name
