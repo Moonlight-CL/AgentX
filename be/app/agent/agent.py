@@ -607,7 +607,9 @@ class ChatRecordService:
         response = table.scan(Limit=100)
         items = response.get('Items', [])
         if items:
-            return [ChatRecord(id=item['id'], agent_id=item['agent_id'], user_message=item['user_message'], create_time=item['create_time']) for item in items]
+            result = [ChatRecord(id=item['id'], agent_id=item['agent_id'], user_message=item['user_message'], create_time=item['create_time']) for item in items]
+
+            return sorted(result, key=lambda x: x.create_time, reverse=True)
         return []
     
     def add_chat_response(self, response: ChatResponse):
