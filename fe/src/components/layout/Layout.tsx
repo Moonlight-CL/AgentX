@@ -1,31 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { Layout as AntLayout, Menu } from 'antd';
+import { Layout as AntLayout, Menu, Dropdown, Avatar } from 'antd';
 import { 
   CommentOutlined, 
   SettingOutlined, 
   AppstoreOutlined,
   MenuUnfoldOutlined,
   MenuFoldOutlined,
-  ScheduleOutlined
+  ScheduleOutlined,
+  UserOutlined,
+  LogoutOutlined
 } from '@ant-design/icons';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { Chat } from '../chat/Chat';
 import { AgentManager } from '../agent';
 import { MCP } from '../mcp/MCP';
 import { Schedule } from '../schedule';
-// import { useChatStore } from '../../store';
+import { Login, Register, ProtectedRoute } from '../auth';
+import { useUserStore } from '../../store/userStore';
+import { userAPI } from '../../services/api';
 
 const { Sider, Content } = AntLayout;
 
 export const Layout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [selectedKey, setSelectedKey] = useState('1');
+  const { isAuthenticated, user, logout } = useUserStore();
 
-  // Update message history when component mounts
-  // useEffect(() => {
-  //   updateMessageHistory();
-  // }, [updateMessageHistory]);
-  
   // Update selected key based on current path
   useEffect(() => {
     const path = window.location.pathname;
@@ -39,6 +39,30 @@ export const Layout: React.FC = () => {
       setSelectedKey('4');
     }
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      await userAPI.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      logout();
+    }
+  };
+
+  const userMenuItems = [
+    {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: 'Profile',
+    },
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: 'Logout',
+      onClick: handleLogout,
+    },
+  ];
 
   const menuItems = [
     {
@@ -65,49 +89,97 @@ export const Layout: React.FC = () => {
 
   return (
     <Router>
-      <AntLayout style={{ minHeight: '100vh' }}>
-        <Sider 
-          collapsible 
-          collapsed={collapsed} 
-          onCollapse={setCollapsed}
-          trigger={null}
-          theme="light"
-          style={{ 
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-            zIndex: 10
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0' }}>
-            <div 
-              style={{ 
-                padding: '0 16px',
-                cursor: 'pointer',
-                fontSize: '16px'
-              }}
-              onClick={() => setCollapsed(!collapsed)}
-            >
-              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            </div>
-            {!collapsed && <span style={{ fontWeight: 'bold' }}>Agent X</span>}
-          </div>
-          <Menu
-            theme="light"
-            mode="inline"
-            selectedKeys={[selectedKey]}
-            items={menuItems}
-            onClick={e => setSelectedKey(e.key)}
-          />
-        </Sider>
-        <Content style={{ background: '#fff' }}>
-          <Routes>
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/agent" element={<AgentManager />} />
-            <Route path="/mcp" element={<MCP />} />
-            <Route path="/schedule" element={<Schedule />} />
-            <Route path="/" element={<Navigate to="/chat" replace />} />
-          </Routes>
-        </Content>
-      </AntLayout>
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        
+        {/* Protected routes */}
+        <Route path="/*" element={
+          <ProtectedRoute>
+            <AntLayout style={{ minHeight: '100vh' }}>
+              <Sider 
+                collapsible 
+                collapsed={collapsed} 
+                onCollapse={setCollapsed}
+                trigger={null}
+                theme="light"
+                style={{ 
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                  zIndex: 10
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0' }}>
+                  <div 
+                    style={{ 
+                      padding: '0 16px',
+                      cursor: 'pointer',
+                      fontSize: '16px'
+                    }}
+                    onClick={() => setCollapsed(!collapsed)}
+                  >
+                    {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                  </div>
+                  {!collapsed && <span style={{ fontWeight: 'bold' }}>Agent X</span>}
+                </div>
+                <Menu
+                  theme="light"
+                  mode="inline"
+                  selectedKeys={[selectedKey]}
+                  items={menuItems}
+                  onClick={e => setSelectedKey(e.key)}
+                />
+                
+                {/* User info at bottom */}
+                {isAuthenticated && user && (
+                  <div style={{ 
+                    position: 'absolute', 
+                    bottom: '16px', 
+                    left: '16px', 
+                    right: '16px',
+                    borderTop: '1px solid #f0f0f0',
+                    paddingTop: '16px'
+                  }}>
+                    {!collapsed ? (
+                      <Dropdown menu={{ items: userMenuItems }} placement="topLeft">
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          cursor: 'pointer',
+                          padding: '8px',
+                          borderRadius: '6px',
+                          transition: 'background-color 0.3s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          <Avatar size="small" icon={<UserOutlined />} />
+                          <span style={{ marginLeft: '8px', fontSize: '14px' }}>
+                            {user.username}
+                          </span>
+                        </div>
+                      </Dropdown>
+                    ) : (
+                      <Dropdown menu={{ items: userMenuItems }} placement="topRight">
+                        <Avatar size="small" icon={<UserOutlined />} style={{ cursor: 'pointer' }} />
+                      </Dropdown>
+                    )}
+                  </div>
+                )}
+              </Sider>
+              <Content style={{ background: '#fff' }}>
+                <Routes>
+                  <Route path="/chat" element={<Chat />} />
+                  <Route path="/agent" element={<AgentManager />} />
+                  <Route path="/mcp" element={<MCP />} />
+                  <Route path="/schedule" element={<Schedule />} />
+                  <Route path="/" element={<Navigate to="/chat" replace />} />
+                </Routes>
+              </Content>
+            </AntLayout>
+          </ProtectedRoute>
+        } />
+      </Routes>
     </Router>
   );
 };

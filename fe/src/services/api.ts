@@ -3,6 +3,21 @@ import axios from 'axios';
 // Base URL for API calls using Vite proxy
 const BASE_URL = '/api';
 
+// User API endpoints
+const USER_API = {
+  register: `${BASE_URL}/user/register`,
+  login: `${BASE_URL}/user/login`,
+  logout: `${BASE_URL}/user/logout`,
+  me: `${BASE_URL}/user/me`,
+  updateMe: `${BASE_URL}/user/me`,
+  changePassword: `${BASE_URL}/user/change-password`,
+  verifyToken: `${BASE_URL}/user/verify-token`,
+  list: `${BASE_URL}/user/list`,
+  get: (id: string) => `${BASE_URL}/user/${id}`,
+  update: (id: string) => `${BASE_URL}/user/${id}`,
+  delete: (id: string) => `${BASE_URL}/user/${id}`,
+};
+
 // Agent API endpoints
 const AGENT_API = {
   list: `${BASE_URL}/agent/list`,
@@ -315,12 +330,234 @@ const mockTools: Tool[] = [
   },
 ];
 
+// User interfaces
+export interface UserRegister {
+  username: string;
+  email?: string;
+  password: string;
+}
+
+export interface UserLogin {
+  username: string;
+  password: string;
+}
+
+export interface UserInfo {
+  user_id: string;
+  username: string;
+  email?: string;
+  status: string;
+}
+
+export interface AuthResponse {
+  message: string;
+  user: UserInfo;
+  access_token: string;
+  token_type: string;
+}
+
+// Create axios instance with interceptors for authentication
+const createAuthenticatedAxios = () => {
+  const instance = axios.create();
+  
+  // Request interceptor to add auth token
+  instance.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('user-storage');
+      if (token) {
+        try {
+          const parsed = JSON.parse(token);
+          if (parsed.state?.token) {
+            config.headers.Authorization = `Bearer ${parsed.state.token}`;
+          }
+        } catch (error) {
+          console.error('Error parsing stored token:', error);
+        }
+      }
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
+    }
+  );
+  
+  // Response interceptor to handle auth errors
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 401) {
+        // Token expired or invalid, clear storage and redirect to login
+        localStorage.removeItem('user-storage');
+        // Use window.location.replace to avoid back button issues
+        window.location.replace('/login');
+      }
+      return Promise.reject(error);
+    }
+  );
+  
+  return instance;
+};
+
+// Create authenticated axios instance
+const authAxios = createAuthenticatedAxios();
+
+// Update all existing API calls to use authenticated axios
+const createAuthenticatedAPI = () => {
+  // Override the default axios instance for all API calls
+  const originalAxios = axios.create();
+  
+  // Add the same interceptors to the original axios instance
+  originalAxios.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('user-storage');
+      if (token) {
+        try {
+          const parsed = JSON.parse(token);
+          if (parsed.state?.token) {
+            config.headers.Authorization = `Bearer ${parsed.state.token}`;
+          }
+        } catch (error) {
+          console.error('Error parsing stored token:', error);
+        }
+      }
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+  
+  originalAxios.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 401) {
+        localStorage.removeItem('user-storage');
+        window.location.replace('/login');
+      }
+      return Promise.reject(error);
+    }
+  );
+  
+  return originalAxios;
+};
+
+// Use authenticated axios for all API calls
+const apiAxios = createAuthenticatedAPI();
+
+// User API functions
+export const userAPI = {
+  // Register a new user
+  register: async (userData: UserRegister): Promise<AuthResponse> => {
+    try {
+      const response = await axios.post(USER_API.register, userData);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Registration failed');
+    }
+  },
+  
+  // Login user
+  login: async (loginData: UserLogin): Promise<AuthResponse> => {
+    try {
+      const response = await axios.post(USER_API.login, loginData);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Login failed');
+    }
+  },
+  
+  // Logout user
+  logout: async (): Promise<{ message: string }> => {
+    try {
+      const response = await authAxios.post(USER_API.logout);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Logout failed');
+    }
+  },
+  
+  // Get current user info
+  getCurrentUser: async (): Promise<{ user: UserInfo }> => {
+    try {
+      const response = await authAxios.get(USER_API.me);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to get user info');
+    }
+  },
+  
+  // Update current user
+  updateCurrentUser: async (userData: { email?: string; status?: string }): Promise<{ message: string; user: UserInfo }> => {
+    try {
+      const response = await authAxios.put(USER_API.updateMe, userData);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to update user');
+    }
+  },
+  
+  // Change password
+  changePassword: async (passwordData: { old_password: string; new_password: string }): Promise<{ message: string }> => {
+    try {
+      const response = await authAxios.post(USER_API.changePassword, passwordData);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to change password');
+    }
+  },
+  
+  // Verify token
+  verifyToken: async (): Promise<{ valid: boolean; user: UserInfo }> => {
+    try {
+      const response = await authAxios.get(USER_API.verifyToken);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Token verification failed');
+    }
+  },
+  
+  // Admin functions
+  listUsers: async (limit: number = 100): Promise<UserInfo[]> => {
+    try {
+      const response = await authAxios.get(`${USER_API.list}?limit=${limit}`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to list users');
+    }
+  },
+  
+  getUserById: async (userId: string): Promise<{ user: UserInfo }> => {
+    try {
+      const response = await authAxios.get(USER_API.get(userId));
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to get user');
+    }
+  },
+  
+  updateUserById: async (userId: string, userData: { email?: string; status?: string }): Promise<{ message: string; user: UserInfo }> => {
+    try {
+      const response = await authAxios.put(USER_API.update(userId), userData);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to update user');
+    }
+  },
+  
+  deleteUserById: async (userId: string): Promise<{ message: string }> => {
+    try {
+      const response = await authAxios.delete(USER_API.delete(userId));
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to delete user');
+    }
+  }
+};
+
 // API functions
 export const mcpAPI = {
   // Get list of MCP servers
   getMCPServers: async (): Promise<MCPServer[]> => {
     try {
-      const response = await axios.get(MCP_API.list);
+      const response = await apiAxios.get(MCP_API.list);
       return response.data;
     } catch (error) {
       console.error('Error fetching MCP servers:', error);
@@ -333,7 +570,7 @@ export const mcpAPI = {
   // Get a specific MCP server
   getMCPServer: async (id: string): Promise<MCPServer | null> => {
     try {
-      const response = await axios.get(MCP_API.get(id));
+      const response = await apiAxios.get(MCP_API.get(id));
       return response.data;
     } catch (error) {
       console.error(`Error fetching MCP server with ID ${id}:`, error);
@@ -346,7 +583,7 @@ export const mcpAPI = {
   // Create or update an MCP server
   createOrUpdateMCPServer: async (server: Partial<MCPServer>): Promise<MCPServer> => {
     try {
-      const response = await axios.post(MCP_API.createOrUpdate, server);
+      const response = await apiAxios.post(MCP_API.createOrUpdate, server);
       return response.data;
     } catch (error) {
       console.error('Error creating/updating MCP server:', error);
@@ -375,7 +612,7 @@ export const mcpAPI = {
   // Delete an MCP server
   deleteMCPServer: async (id: string): Promise<boolean> => {
     try {
-      await axios.delete(MCP_API.delete(id));
+      await apiAxios.delete(MCP_API.delete(id));
       return true;
     } catch (error) {
       console.error(`Error deleting MCP server with ID ${id}:`, error);
@@ -390,7 +627,7 @@ export const chatAPI = {
   // Get list of chat records
   getChatRecords: async (): Promise<ChatRecord[]> => {
     try {
-      const response = await axios.get(CHAT_API.listRecords);
+      const response = await apiAxios.get(CHAT_API.listRecords);
       return response.data;
     } catch (error) {
       console.error('Error fetching chat records:', error);
@@ -401,7 +638,7 @@ export const chatAPI = {
   // Get chat responses for a specific chat
   getChatResponses: async (chatId: string): Promise<ChatResponse[]> => {
     try {
-      const response = await axios.get(CHAT_API.listResponses(chatId));
+      const response = await apiAxios.get(CHAT_API.listResponses(chatId));
       return response.data;
     } catch (error) {
       console.error(`Error fetching chat responses for chat ID ${chatId}:`, error);
@@ -410,13 +647,32 @@ export const chatAPI = {
   },
   
   // Delete a chat record
-  deleteChat: async (chatId: string): Promise<boolean> => {
+  deleteChat: async (chatId: string): Promise<{ success: boolean; message: string }> => {
     try {
-      await axios.delete(CHAT_API.deleteChat(chatId));
-      return true;
-    } catch (error) {
+      const response = await apiAxios.delete(CHAT_API.deleteChat(chatId));
+      
+      // Check if the response contains a success message
+      if (response.data && response.data.message) {
+        return { success: true, message: response.data.message };
+      }
+      // Check if the response contains an error
+      else if (response.data && response.data.error) {
+        return { success: false, message: response.data.error };
+      }
+      // Default success case
+      else {
+        return { success: true, message: 'Chat deleted successfully' };
+      }
+    } catch (error: any) {
       console.error(`Error deleting chat with ID ${chatId}:`, error);
-      return false;
+      
+      // Try to extract error message from response
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.detail || 
+                          error.message || 
+                          'Failed to delete chat';
+      
+      return { success: false, message: errorMessage };
     }
   }
 };
@@ -425,7 +681,7 @@ export const scheduleAPI = {
   // Get list of schedules
   getSchedules: async (): Promise<Schedule[]> => {
     try {
-      const response = await axios.get(SCHEDULE_API.list);
+      const response = await apiAxios.get(SCHEDULE_API.list);
       return response.data;
     } catch (error) {
       console.error('Error fetching schedules:', error);
@@ -438,7 +694,7 @@ export const scheduleAPI = {
   // Create a new schedule
   createSchedule: async (schedule: { agentId: string; cronExpression: string; user_message?: string }): Promise<Schedule> => {
     try {
-      const response = await axios.post(SCHEDULE_API.create, schedule);
+      const response = await apiAxios.post(SCHEDULE_API.create, schedule);
       return response.data;
     } catch (error) {
       console.error('Error creating schedule:', error);
@@ -467,7 +723,7 @@ export const scheduleAPI = {
   // Update an existing schedule
   updateSchedule: async (schedule: Schedule): Promise<Schedule> => {
     try {
-      const response = await axios.put(SCHEDULE_API.update(schedule.id), schedule);
+      const response = await apiAxios.put(SCHEDULE_API.update(schedule.id), schedule);
       return response.data;
     } catch (error) {
       console.error('Error updating schedule:', error);
@@ -488,7 +744,7 @@ export const scheduleAPI = {
   // Delete a schedule
   deleteSchedule: async (id: string): Promise<boolean> => {
     try {
-      await axios.delete(SCHEDULE_API.delete(id));
+      await apiAxios.delete(SCHEDULE_API.delete(id));
       return true;
     } catch (error) {
       console.error(`Error deleting schedule with ID ${id}:`, error);
@@ -503,7 +759,7 @@ export const agentAPI = {
   // Get list of agents
   getAgents: async (): Promise<Agent[]> => {
     try {
-      const response = await axios.get(AGENT_API.list);
+      const response = await apiAxios.get(AGENT_API.list);
       return response.data;
     } catch (error) {
       console.error('Error fetching agents:', error);
@@ -516,7 +772,7 @@ export const agentAPI = {
   // Create or update an agent
   createOrUpdateAgent: async (agent: Partial<Agent>): Promise<Agent> => {
     try {
-      const response = await axios.post(AGENT_API.createOrUpdate, agent);
+      const response = await apiAxios.post(AGENT_API.createOrUpdate, agent);
       return response.data;
     } catch (error) {
       console.error('Error creating/updating agent:', error);
@@ -548,7 +804,7 @@ export const agentAPI = {
   // Get list of available tools
   getTools: async (): Promise<Tool[]> => {
     try {
-      const response = await axios.get(AGENT_API.toolList);
+      const response = await apiAxios.get(AGENT_API.toolList);
       return response.data;
     } catch (error) {
       console.error('Error fetching tools:', error);
@@ -560,7 +816,7 @@ export const agentAPI = {
 
   deleteAgent: async (id: string): Promise<boolean> => {
     try {
-      await axios.delete(AGENT_API.delete(id));
+      await apiAxios.delete(AGENT_API.delete(id));
       return true;
     } catch (error) {
       console.error(`Error deleting agent with ID ${id}:`, error);
@@ -572,12 +828,28 @@ export const agentAPI = {
   
   // Stream chat with an agent
   streamChat: (agentId: string, userMessage: string, chatRecordEnabled: boolean = true): Promise<Response> => {
+    // Get token for SSE request
+    const token = localStorage.getItem('user-storage');
+    console.log('Retrieved token from localStorage:', token);
+    let authToken = '';
+    if (token) {
+      try {
+        const parsed = JSON.parse(token);
+        if (parsed.state?.token) {
+          authToken = parsed.state.token;
+        }
+      } catch (error) {
+        console.error('Error parsing stored token:', error);
+      }
+    }
+    
     // Use fetch API to make a POST request with proper headers for SSE
     return fetch(AGENT_API.streamChat, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
+        'Authorization': authToken ? `Bearer ${authToken}` : '',
       },
       body: JSON.stringify({
         agent_id: agentId,

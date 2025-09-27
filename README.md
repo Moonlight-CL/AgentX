@@ -6,12 +6,15 @@ AgentX is an agent management platform built on top of the Strands framework, al
 
 ## 🌟 Features
 
+- **User Authentication**: Secure user registration and login system with JWT token-based authentication
+- **Data Isolation**: Each user's agents, chat records, and data are completely isolated from other users
 - **Agent Management**: Create, configure, and manage AI agents through a user-friendly interface
 - **Multiple Model Support**: Use models from Bedrock, OpenAI, Anthropic, LiteLLM, Ollama, or custom providers
 - **Extensive Tool Library**: Equip agents with tools for RAG, file operations, web interactions, image generation, and more
 - **Agent Orchestration**: Create orchestrator agents that can coordinate with other agents
 - **Scheduling**: Schedule agent tasks to run automatically at specified times
 - **MCP Integration**: Extend agent capabilities with Model Context Protocol servers
+- **Chat History Management**: View, manage, and delete your conversation history with proper error handling
 
 ## 🏗️ Architecture
 
@@ -69,11 +72,19 @@ Model Context Protocol servers that extend agent capabilities:
    
    For local development, you need to create the following DynamoDB tables:
    
+   - **UserTable**
+     - Partition key: `user_id` (String)
+     - Global Secondary Index: `username-index`
+       - Partition key: `username` (String)
+   
    - **AgentTable**
      - Partition key: `id` (String)
    
    - **ChatRecordTable**
      - Partition key: `id` (String)
+     - Global Secondary Index: `user-id-index`
+       - Partition key: `user_id` (String)
+       - Sort key: `create_time` (String)
    
    - **ChatResponseTable**
      - Partition key: `id` (String)
@@ -84,11 +95,6 @@ Model Context Protocol servers that extend agent capabilities:
    
    - **AgentScheduleTable**
      - Partition key: `id` (String)
-   
-   You can use DynamoDB Local for development by running:
-   ```bash
-   docker run -p 8000:8000 amazon/dynamodb-local
-   ```
 
 4. **Set up the frontend**:
    ```bash

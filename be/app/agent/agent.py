@@ -535,6 +535,7 @@ def agent_as_tool(agent: AgentPO, **kwargs):
 class ChatRecord(BaseModel):
     id: str
     agent_id: str
+    user_id: str  # Added user_id field
     user_message: str
     create_time: str
 
@@ -575,6 +576,7 @@ class ChatRecordService:
             Item={
                 'id': record.id,
                 'agent_id': record.agent_id,
+                'user_id': record.user_id,  # Added user_id field
                 'user_message': record.user_message,
                 'create_time': record.create_time
             }   
@@ -593,7 +595,13 @@ class ChatRecordService:
 
         if 'Item' in response:
             item = response['Item']
-            return ChatRecord(id=item['id'], agent_id=item['agent_id'], user_message=item['user_message'], create_time=item['create_time'])
+            return ChatRecord(
+                id=item['id'], 
+                agent_id=item['agent_id'], 
+                user_id=item.get('user_id', ''),  # Handle existing records without user_id
+                user_message=item['user_message'], 
+                create_time=item['create_time']
+            )
         return None
 
     
@@ -607,7 +615,45 @@ class ChatRecordService:
         response = table.scan(Limit=100)
         items = response.get('Items', [])
         if items:
-            result = [ChatRecord(id=item['id'], agent_id=item['agent_id'], user_message=item['user_message'], create_time=item['create_time']) for item in items]
+            result = [ChatRecord(
+                id=item['id'], 
+                agent_id=item['agent_id'], 
+                user_id=item.get('user_id', ''),  # Handle existing records without user_id
+                user_message=item['user_message'], 
+                create_time=item['create_time']
+            ) for item in items]
+
+            return sorted(result, key=lambda x: x.create_time, reverse=True)
+        return []
+    
+    def get_chat_records_by_user(self, user_id: str) -> List[ChatRecord]:
+        """
+        Retrieve chat records for a specific user from Amazon DynamoDB.
+        This includes records with the matching user_id and legacy records without user_id.
+
+        :param user_id: The user ID to filter by.
+        :return: A list of ChatRecord objects for the user.
+        """
+        table = self.dynamodb.Table(self.chat_record_table_name)
+        
+        # Use scan with filter expression to get records that either:
+        # 1. Have matching user_id, or
+        # 2. Don't have user_id field (legacy records)
+        response = table.scan(
+            FilterExpression=boto3.dynamodb.conditions.Attr('user_id').eq(user_id) | 
+                           boto3.dynamodb.conditions.Attr('user_id').not_exists(),
+            Limit=100
+        )
+        
+        items = response.get('Items', [])
+        if items:
+            result = [ChatRecord(
+                id=item['id'], 
+                agent_id=item['agent_id'], 
+                user_id=item.get('user_id', ''),  # Handle existing records without user_id
+                user_message=item['user_message'], 
+                create_time=item['create_time']
+            ) for item in items]
 
             return sorted(result, key=lambda x: x.create_time, reverse=True)
         return []

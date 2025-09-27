@@ -422,6 +422,21 @@ export class AgentXStack extends cdk.Stack {
     
     // Conditionally create DynamoDB tables for agent and MCP services
     if (createDynamoDBTables) {
+      // Create DynamoDB table for user management
+      const userTable = new cdk.aws_dynamodb.Table(this, 'UserTable', {
+        tableName: 'UserTable',
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+      
+      // Add GSI for username lookup
+      userTable.addGlobalSecondaryIndex({
+        indexName: 'username-index',
+        partitionKey: { name: 'username', type: cdk.aws_dynamodb.AttributeType.STRING },
+        projectionType: cdk.aws_dynamodb.ProjectionType.ALL,
+      });
+      
       // Create DynamoDB tables used by agent.py
       const agentTable = new cdk.aws_dynamodb.Table(this, 'AgentTable', {
         tableName: 'AgentTable',
@@ -435,6 +450,14 @@ export class AgentXStack extends cdk.Stack {
         partitionKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
         billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+      
+      // Add GSI for user_id lookup to support data isolation
+      chatRecordTable.addGlobalSecondaryIndex({
+        indexName: 'user-id-index',
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'create_time', type: cdk.aws_dynamodb.AttributeType.STRING },
+        projectionType: cdk.aws_dynamodb.ProjectionType.ALL,
       });
       
       const chatResponseTable = new cdk.aws_dynamodb.Table(this, 'ChatResponseTable', {
@@ -461,7 +484,7 @@ export class AgentXStack extends cdk.Stack {
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
       
-      console.log('DynamoDB tables for agent and MCP services will be created');
+      console.log('DynamoDB tables for agent, user management, and MCP services will be created');
     } else {
       console.log('DynamoDB tables creation is disabled');
     }
