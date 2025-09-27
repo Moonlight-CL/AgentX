@@ -89,11 +89,21 @@ async def parse_chat_request_and_add_record(request: Request) -> Tuple[Optional[
     user_message = data.get("user_message")
     chat_record_enabled = data.get("chat_record_enabled", True)  # Default to True if not provided
     
+    # Get current user from request state (set by AuthMiddleware)
+    current_user = getattr(request.state, 'current_user', None)
+    user_id = current_user.get('user_id', '') if current_user else ''
+    
     # Create a chat record if chat_record_enabled is True
     chat_id = uuid.uuid4().hex
     if chat_record_enabled:
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        chat_record = ChatRecord(id=chat_id, agent_id=agent_id, user_message=user_message, create_time=current_time)
+        chat_record = ChatRecord(
+            id=chat_id, 
+            agent_id=agent_id, 
+            user_id=user_id,  # Added user_id from authenticated user
+            user_message=user_message, 
+            create_time=current_time
+        )
         chat_reccord_service.add_chat_record(chat_record)
     
     return agent_id, user_message, chat_id, chat_record_enabled

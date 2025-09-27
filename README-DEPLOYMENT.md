@@ -9,7 +9,7 @@ The AgentX deployment architecture consists of:
 - **AWS ECS Cluster**: Container orchestration service
 - **AWS ECR Repositories**: Docker image storage
 - **Application Load Balancer**: Traffic distribution
-- **DynamoDB Tables**: Data storage
+- **DynamoDB Tables**: Data storage with user authentication and data isolation
 - **EventBridge Scheduler**: Task scheduling
 - **Lambda Functions**: Serverless execution
 
@@ -187,13 +187,59 @@ cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
 cdk --app "npx ts-node --prefer-ts-exts bin/cdk-combined.ts" deploy AgentXStack
 ```
 
-### 3. Deployment Verification
+### 3. DynamoDB Tables Structure
+
+The CDK deployment creates the following DynamoDB tables with user authentication and data isolation support:
+
+#### UserTable
+- **Partition Key**: `user_id` (String)
+- **Global Secondary Index**: `username-index`
+  - Partition Key: `username` (String)
+- **Purpose**: Stores user authentication information including hashed passwords, salts, and user metadata
+
+#### ChatRecordTable
+- **Partition Key**: `id` (String)
+- **Global Secondary Index**: `user-id-index`
+  - Partition Key: `user_id` (String)
+  - Sort Key: `create_time` (String)
+- **Purpose**: Stores chat conversation records with user isolation support
+
+#### ChatResponseTable
+- **Partition Key**: `id` (String)
+- **Sort Key**: `resp_no` (Number)
+- **Purpose**: Stores agent responses for each chat conversation
+
+#### AgentTable
+- **Partition Key**: `id` (String)
+- **Purpose**: Stores agent configurations and metadata
+
+#### HttpMCPTable
+- **Partition Key**: `id` (String)
+- **Purpose**: Stores MCP server configurations
+
+#### AgentScheduleTable
+- **Partition Key**: `id` (String)
+- **Purpose**: Stores scheduled agent task configurations
+
+### 4. User Authentication Features
+
+The deployed application includes:
+
+- **User Registration**: New users can create accounts with username/email and password
+- **User Login**: JWT token-based authentication system
+- **Data Isolation**: Each user's data (chat records, agents) is completely isolated
+- **Session Management**: Secure token-based session handling
+- **Password Security**: PBKDF2 hashing with individual salts for each user
+
+### 5. Deployment Verification
 
 After deployment is complete, you can verify the deployment by:
 
 1. Checking the AWS CloudFormation console for stack status
 2. Accessing the application using the ALB DNS name provided in the CloudFormation outputs
 3. Monitoring the ECS services in the AWS ECS console
+4. Testing user registration and login functionality
+5. Verifying data isolation by creating multiple user accounts
 
 ## ⚙️ Configuration
 

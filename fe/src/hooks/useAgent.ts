@@ -3,6 +3,7 @@ import { useXAgent, useXChat } from '@ant-design/x';
 import { getEventType, type AgentEvent, type BubbleDataType, type MessageEvent} from '../types';
 import { useChatStore } from '../store';
 import { combineEvents, formatToHTML, formatMessageEvent } from '../utils/agentEventFormatter';
+import { agentAPI } from '../services/api';
 
 export const useAgent = () => {
   const abortController = useRef<AbortController | null>(null);
@@ -40,25 +41,19 @@ export const useAgent = () => {
         callbacks.onStream(controller);
       }
       
-      // Call the stream_chat API with the correct parameters
+      // Call the stream_chat API with the correct parameters using agentAPI
       console.log('Sending request with agent ID:', currentSelectedAgent.id);
       console.log('User message:', info.message);
       
       // Get the chatRecordEnabled value from the store
       const chatRecordEnabled = useChatStore.getState().chatRecordEnabled;
       
-      const response = await fetch('/api/agent/stream_chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-        },
-        body: JSON.stringify({
-          agent_id: currentSelectedAgent.id,
-          user_message: info.message.content,
-          chat_record_enabled: chatRecordEnabled
-        })
-      });
+      // Use the unified agentAPI.streamChat method which includes authentication
+      const response = await agentAPI.streamChat(
+        currentSelectedAgent.id,
+        info.message.content,
+        chatRecordEnabled
+      );
       
       console.log('Response status:', response.status);
       
