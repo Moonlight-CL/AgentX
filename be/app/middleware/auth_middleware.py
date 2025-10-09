@@ -1,7 +1,7 @@
 import os
 import json
 from typing import Optional, Set
-from fastapi import Request, Response, HTTPException, status
+from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from ..user.auth import JWTAuth

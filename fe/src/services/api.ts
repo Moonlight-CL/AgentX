@@ -50,6 +50,32 @@ const SCHEDULE_API = {
   delete: (id: string) => `${BASE_URL}/schedule/delete/${id}`,
 };
 
+// Orchestration API endpoints
+const ORCHESTRATION_API = {
+  list: `${BASE_URL}/orchestration/list`,
+  create: `${BASE_URL}/orchestration/create`,
+  get: (id: string) => `${BASE_URL}/orchestration/${id}`,
+  update: (id: string) => `${BASE_URL}/orchestration/${id}`,
+  delete: (id: string) => `${BASE_URL}/orchestration/${id}`,
+  execute: (id: string) => `${BASE_URL}/orchestration/${id}/execute`,
+  executionStatus: (executionId: string) => `${BASE_URL}/orchestration/execution/${executionId}/status`,
+  stopExecution: (executionId: string) => `${BASE_URL}/orchestration/execution/${executionId}/stop`,
+};
+
+// Configuration API endpoints
+const CONFIG_API = {
+  list: `${BASE_URL}/config/list`,
+  create: `${BASE_URL}/config/create`,
+  get: (key: string) => `${BASE_URL}/config/get/${key}`,
+  update: (key: string) => `${BASE_URL}/config/update/${key}`,
+  delete: (key: string) => `${BASE_URL}/config/delete/${key}`,
+  listByParent: (parent: string) => `${BASE_URL}/config/list/${parent}`,
+  rootCategories: `${BASE_URL}/config/root-categories`,
+  categoryTree: `${BASE_URL}/config/category-tree`,
+  modelProvider: `${BASE_URL}/config/model-provider`,
+  initDefaultCategories: `${BASE_URL}/config/init-default-categories`,
+};
+
 // Agent types
 export const AGENT_TYPES = {
   PLAIN: 1,
@@ -159,6 +185,165 @@ export interface Schedule {
   createdAt: string;
   updatedAt: string;
   user_message?: string;
+}
+
+// Configuration interfaces
+export interface SystemConfig {
+  key: string;
+  value: string;
+  key_display_name?: string;
+  type: string; // 'category' or 'item'
+  seq_num: number;
+  parent?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ConfigCategory {
+  key: string;
+  key_display_name?: string;
+  parent?: string;
+  children: ConfigCategory[];
+  configs: SystemConfig[];
+}
+
+export interface CreateConfigRequest {
+  key: string;
+  value: string;
+  key_display_name?: string;
+  type: string;
+  seq_num: number;
+  parent?: string;
+}
+
+export interface UpdateConfigRequest {
+  value?: string;
+  key_display_name?: string;
+  type?: string;
+  seq_num?: number;
+  parent?: string;
+}
+
+export interface ConfigResponse {
+  success: boolean;
+  message: string;
+  data?: SystemConfig;
+}
+
+export interface ConfigListResponse {
+  success: boolean;
+  message: string;
+  data: SystemConfig[];
+}
+
+export interface CategoryTreeResponse {
+  success: boolean;
+  message: string;
+  data: ConfigCategory[];
+}
+
+export interface ModelProviderConfig {
+  model_id: string;
+  temperature: number;
+  top_p: number;
+  max_tokens: number;
+  api_base_url?: string;
+  api_key?: string;
+}
+
+export interface ModelProviderRequest {
+  provider_key: string;
+  provider_display_name: string;
+  config: ModelProviderConfig;
+}
+
+// Orchestration interfaces
+export interface OrchestrationConfig {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string;
+  type: string; // 'swarm', 'graph', 'workflow', 'agent_as_tool'
+  nodes: OrchestrationNode[];
+  edges: OrchestrationEdge[];
+  
+  // Common configuration
+  executionTimeout?: number;
+  
+  // Swarm-specific configuration
+  entryPoint?: string;
+  maxHandoffs?: number;
+  maxIterations?: number;
+  nodeTimeout?: number;
+  repetitiveHandoffDetectionWindow?: number;
+  repetitiveHandoffMinUniqueAgents?: number;
+  
+  // Graph-specific configuration
+  maxNodeExecutions?: number;
+  resetOnRevisit?: boolean;
+  
+  // Workflow-specific configuration
+  parallelExecution?: boolean;
+  taskPriorities?: Record<string, number>;
+  
+  // Agent as Tool-specific configuration
+  orchestratorAgent?: string;
+  toolAgents?: string[];
+  
+  // Additional metadata
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface OrchestrationNode {
+  id: string;
+  type: string; // 'agent' or 'orchestration'
+  name: string;
+  displayName: string;
+  description: string;
+  position: { x: number; y: number };
+  agentId?: string;
+  orchestrationId?: string;
+  agentConfig?: any;
+  orchestrationConfig?: any;
+}
+
+export interface OrchestrationEdge {
+  id: string;
+  source: string;
+  target: string;
+  condition?: string;
+  label?: string;
+}
+
+export interface OrchestrationExecution {
+  id: string;
+  orchestrationId: string;
+  userId: string;
+  status: string; // 'pending', 'running', 'completed', 'failed'
+  startTime: string;
+  endTime?: string;
+  inputMessage: string;
+  results?: Record<string, any>;
+  nodeHistory?: Array<{
+    nodeId: string;
+    status: string;
+    executionTime: number;
+    result?: any;
+  }>;
+  errorMessage?: string;
+}
+
+export interface ExecutionRequest {
+  inputMessage: string;
+  chatRecordEnabled?: boolean;
+}
+
+export interface ExecutionResponse {
+  executionId: string;
+  status: string;
+  message: string;
 }
 
 // Mock data for schedules
@@ -626,6 +811,118 @@ export const mcpAPI = {
   },
 };
 
+export const configAPI = {
+  // Get category tree
+  getCategoryTree: async (): Promise<CategoryTreeResponse> => {
+    try {
+      const response = await apiAxios.get(CONFIG_API.categoryTree);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching category tree:', error);
+      throw new Error('Failed to fetch category tree');
+    }
+  },
+  
+  // Get configs by parent
+  getConfigsByParent: async (parent: string): Promise<ConfigListResponse> => {
+    try {
+      const response = await apiAxios.get(CONFIG_API.listByParent(parent));
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching configs for parent ${parent}:`, error);
+      throw new Error('Failed to fetch configs');
+    }
+  },
+  
+  // Get all configs
+  getAllConfigs: async (): Promise<ConfigListResponse> => {
+    try {
+      const response = await apiAxios.get(CONFIG_API.list);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching all configs:', error);
+      throw new Error('Failed to fetch configs');
+    }
+  },
+  
+  // Get specific config
+  getConfig: async (key: string): Promise<ConfigResponse> => {
+    try {
+      const response = await apiAxios.get(CONFIG_API.get(key));
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching config ${key}:`, error);
+      throw new Error('Failed to fetch config');
+    }
+  },
+  
+  // Create config
+  createConfig: async (config: CreateConfigRequest): Promise<ConfigResponse> => {
+    try {
+      const response = await apiAxios.post(CONFIG_API.create, config);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating config:', error);
+      throw new Error('Failed to create config');
+    }
+  },
+  
+  // Update config
+  updateConfig: async (key: string, config: UpdateConfigRequest): Promise<ConfigResponse> => {
+    try {
+      const response = await apiAxios.put(CONFIG_API.update(key), config);
+      return response.data;
+    } catch (error) {
+      console.error(`Error updating config ${key}:`, error);
+      throw new Error('Failed to update config');
+    }
+  },
+  
+  // Delete config
+  deleteConfig: async (key: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const response = await apiAxios.delete(CONFIG_API.delete(key));
+      return response.data;
+    } catch (error) {
+      console.error(`Error deleting config ${key}:`, error);
+      throw new Error('Failed to delete config');
+    }
+  },
+  
+  // Get root categories
+  getRootCategories: async (): Promise<ConfigListResponse> => {
+    try {
+      const response = await apiAxios.get(CONFIG_API.rootCategories);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching root categories:', error);
+      throw new Error('Failed to fetch root categories');
+    }
+  },
+  
+  // Create model provider
+  createModelProvider: async (provider: ModelProviderRequest): Promise<ConfigResponse> => {
+    try {
+      const response = await apiAxios.post(CONFIG_API.modelProvider, provider);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating model provider:', error);
+      throw new Error('Failed to create model provider');
+    }
+  },
+  
+  // Initialize default categories
+  initDefaultCategories: async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const response = await apiAxios.post(CONFIG_API.initDefaultCategories);
+      return response.data;
+    } catch (error) {
+      console.error('Error initializing default categories:', error);
+      throw new Error('Failed to initialize default categories');
+    }
+  }
+};
+
 export const chatAPI = {
   // Get list of chat records
   getChatRecords: async (): Promise<ChatRecord[]> => {
@@ -648,7 +945,6 @@ export const chatAPI = {
       return [];
     }
   },
-  
   // Delete a chat record
   deleteChat: async (chatId: string): Promise<{ success: boolean; message: string }> => {
     try {
@@ -861,4 +1157,108 @@ export const agentAPI = {
       })
     });
   }
+};
+
+export const orchestrationAPI = {
+  // Get list of orchestrations
+  getOrchestrations: async (): Promise<OrchestrationConfig[]> => {
+    try {
+      const response = await apiAxios.get(ORCHESTRATION_API.list);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching orchestrations:', error);
+      throw new Error('Failed to fetch orchestrations');
+    }
+  },
+  
+  // Get a specific orchestration
+  getOrchestration: async (id: string): Promise<OrchestrationConfig> => {
+    try {
+      const response = await apiAxios.get(ORCHESTRATION_API.get(id));
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching orchestration with ID ${id}:`, error);
+      throw new Error('Failed to fetch orchestration');
+    }
+  },
+  
+  // Create a new orchestration
+  createOrchestration: async (config: Partial<OrchestrationConfig>): Promise<OrchestrationConfig> => {
+    try {
+      const response = await apiAxios.post(ORCHESTRATION_API.create, config);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating orchestration:', error);
+      throw new Error('Failed to create orchestration');
+    }
+  },
+  
+  // Update an existing orchestration
+  updateOrchestration: async (id: string, config: Partial<OrchestrationConfig>): Promise<OrchestrationConfig> => {
+    try {
+      const response = await apiAxios.put(ORCHESTRATION_API.update(id), config);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating orchestration:', error);
+      throw new Error('Failed to update orchestration');
+    }
+  },
+  
+  // Delete an orchestration
+  deleteOrchestration: async (id: string): Promise<boolean> => {
+    try {
+      await apiAxios.delete(ORCHESTRATION_API.delete(id));
+      return true;
+    } catch (error) {
+      console.error(`Error deleting orchestration with ID ${id}:`, error);
+      throw new Error('Failed to delete orchestration');
+    }
+  },
+  
+  // Execute an orchestration
+  executeOrchestration: async (id: string, request: ExecutionRequest): Promise<ExecutionResponse> => {
+    try {
+      const response = await apiAxios.post(ORCHESTRATION_API.execute(id), request);
+      return response.data;
+    } catch (error) {
+      console.error('Error executing orchestration:', error);
+      throw new Error('Failed to execute orchestration');
+    }
+  },
+  
+  // Get execution status
+  getExecutionStatus: async (executionId: string): Promise<OrchestrationExecution> => {
+    try {
+      const response = await apiAxios.get(ORCHESTRATION_API.executionStatus(executionId));
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching execution status for ${executionId}:`, error);
+      throw new Error('Failed to get execution status');
+    }
+  },
+  
+  // Stop execution
+  stopExecution: async (executionId: string): Promise<boolean> => {
+    try {
+      await apiAxios.post(ORCHESTRATION_API.stopExecution(executionId));
+      return true;
+    } catch (error) {
+      console.error(`Error stopping execution ${executionId}:`, error);
+      throw new Error('Failed to stop execution');
+    }
+  },
+  
+  // List executions
+  listExecutions: async (orchestrationId?: string): Promise<OrchestrationExecution[]> => {
+    try {
+      const url = orchestrationId 
+        ? `/orchestration/executions?orchestrationId=${orchestrationId}`
+        : '/orchestration/executions';
+      const response = await apiAxios.get(url);
+      return response.data;
+    } catch (error) {
+      console.error('Error listing executions:', error);
+      throw new Error('Failed to list executions');
+    }
+  },
 };

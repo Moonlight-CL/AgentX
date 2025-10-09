@@ -18,9 +18,10 @@ import {
   EditOutlined, 
   DeleteOutlined
 } from '@ant-design/icons';
-import { AGENT_TYPES, MODEL_PROVIDERS, BEDROCK_MODELS, TOOL_TYPES, OPENAI_MODELS } from '../../services/api';
+import { AGENT_TYPES, TOOL_TYPES } from '../../services/api';
 import type { Agent, Tool } from '../../services/api';
 import { useAgentStore } from '../../store/agentStore';
+import { useModelProviders } from '../../hooks/useModelProviders';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -30,6 +31,14 @@ export const AgentManager: React.FC = () => {
   // Form instances - initialized with default values
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
+  
+  // Get model providers from configuration
+  const { 
+    providers, 
+    getProviderNumber, 
+    getProviderKey,
+    getModelIds,
+  } = useModelProviders();
   
   // Get state and actions from Zustand store
   const { 
@@ -59,12 +68,19 @@ export const AgentManager: React.FC = () => {
     handleDeleteAgent
   } = useAgentStore();
   
-  // Reset form when modal is opened
+  // Reset form when modal is opened and set initial values
   useEffect(() => {
-    if (createModalVisible) {
+    if (createModalVisible && providers.length > 0) {
       createForm.resetFields();
+      // Set initial values after providers are loaded
+      createForm.setFieldsValue({
+        agent_type: AGENT_TYPES.PLAIN,
+        model_provider: getProviderNumber(providers[0].key),
+        model_id: providers[0].models.length > 0 ? providers[0].models[0].config.model_id : 'Custom',
+        tools: [],
+      });
     }
-  }, [createModalVisible, createForm]);
+  }, [createModalVisible, createForm, providers]);
   
   // Initialize edit form when selected agent changes
   useEffect(() => {
@@ -82,15 +98,35 @@ export const AgentManager: React.FC = () => {
   }, [selectedAgent, editModalVisible, editForm]);
   
   // Handle form values change
-  const handleFormValuesChange = (changedValues: { model_provider?: number }, form: FormInstance) => {
+  const handleFormValuesChange = (changedValues: { model_provider?: number, model_id?: string}, form: FormInstance) => {
     if ('model_provider' in changedValues) {
       // Reset model_id when model_provider changes
-      if (changedValues.model_provider === MODEL_PROVIDERS.BEDROCK) {
-        form.setFieldsValue({ model_id: BEDROCK_MODELS[0], extras: {} });
-      } else if (changedValues.model_provider === MODEL_PROVIDERS.OPENAI) {
-        form.setFieldsValue({ model_id: OPENAI_MODELS[0], extras: { base_url: '', api_key: '' } });
+      const providerKey = getProviderKey(changedValues.model_provider!);
+      const modelIds = getModelIds(providerKey);
+      const provider = providers.find(p => p.key === providerKey)!;
+      
+      if (modelIds.length > 0) {
+        form.setFieldsValue({ model_id: modelIds[0] });
+        const model = provider.models.find(m => m.config.model_id === modelIds[0])!;
+        if(model.config.api_base_url && model.config.api_key) {
+            form.setFieldsValue({extras: { base_url: model.config.api_base_url, api_key: model.config.api_key }});
+        }else {
+          form.setFieldsValue({ extras: {} });
+        }
       } else {
-        form.setFieldsValue({ model_id: 'custom', extras: {} });
+        form.setFieldsValue({ model_id: 'Custom' });
+      }
+    }
+
+    if('model_id' in changedValues) {
+      const provider = getProviderKey(form.getFieldValue("model_provider"))!;
+      const modelId = changedValues.model_id!;
+
+      const model = providers.find(p => p.key === provider)!.models.find(m => m.config.model_id === modelId)!;
+      if(model.config.api_base_url && model.config.api_key) {
+        form.setFieldsValue({extras: { base_url: model.config.api_base_url, api_key: model.config.api_key }});
+      }else {
+        form.setFieldsValue({ extras: {} });
       }
     }
   };
@@ -161,22 +197,9 @@ export const AgentManager: React.FC = () => {
 
   // Helper function to get model provider name
   const getModelProviderName = (provider: number): string => {
-    switch (provider) {
-      case MODEL_PROVIDERS.BEDROCK:
-        return 'Bedrock';
-      case MODEL_PROVIDERS.OPENAI:
-        return 'OpenAI';
-      case MODEL_PROVIDERS.ANTHROPIC:
-        return 'Anthropic';
-      case MODEL_PROVIDERS.LITELLM:
-        return 'LiteLLM';
-      case MODEL_PROVIDERS.OLLAMA:
-        return 'Ollama';
-      case MODEL_PROVIDERS.CUSTOM:
-        return 'Custom';
-      default:
-        return '未知';
-    }
+    const providerKey = getProviderKey(provider);
+    const providerInfo = providers.find(p => p.key === providerKey);
+    return providerInfo?.displayName || providerKey || '未知';
   };
 
 
@@ -259,7 +282,8 @@ export const AgentManager: React.FC = () => {
               </div>
             }
             placement="left"
-            overlayStyle={{ maxWidth: '400px' }}
+            styles={{ root: { maxWidth: '400px' } }}
+            // overlayStyle={{ maxWidth: '400px' }}
           >
             <Button 
               type="text" 
@@ -296,8 +320,8 @@ export const AgentManager: React.FC = () => {
       onValuesChange={(changedValues) => handleFormValuesChange(changedValues, createForm)}
       initialValues={{
         agent_type: AGENT_TYPES.PLAIN,
-        model_provider: MODEL_PROVIDERS.BEDROCK,
-        model_id: BEDROCK_MODELS[0],
+        model_provider: providers.length > 0 ? getProviderNumber(providers[0].key) : 1,
+        model_id: providers.length > 0 && providers[0].models.length > 0 ? providers[0].models[0].config.model_id : 'Custom',
         tools: [],
       }}
     >
@@ -351,12 +375,11 @@ export const AgentManager: React.FC = () => {
         rules={[{ required: true, message: '请选择Model Provider' }]}
       >
         <Select>
-          <Option value={MODEL_PROVIDERS.BEDROCK}>Bedrock</Option>
-          <Option value={MODEL_PROVIDERS.OPENAI}>OpenAI</Option>
-          <Option value={MODEL_PROVIDERS.ANTHROPIC}>Anthropic</Option>
-          <Option value={MODEL_PROVIDERS.LITELLM}>LiteLLM</Option>
-          <Option value={MODEL_PROVIDERS.OLLAMA}>Ollama</Option>
-          <Option value={MODEL_PROVIDERS.CUSTOM}>Custom</Option>
+          {providers.map((provider) => (
+            <Option key={provider.key} value={getProviderNumber(provider.key)}>
+              {provider.key}
+            </Option>
+          ))}
         </Select>
       </Form.Item>
       
@@ -364,54 +387,71 @@ export const AgentManager: React.FC = () => {
         noStyle
         shouldUpdate={(prevValues, currentValues) => prevValues.model_provider !== currentValues.model_provider}
       >
-        {({ getFieldValue }) => (
-          <Form.Item
-            name="model_id"
-            label="Model ID"
-            rules={[{ required: true, message: '请选择Model ID' }]}
-          >
-            <Select>
-              {getFieldValue('model_provider') === MODEL_PROVIDERS.BEDROCK ? (
-                BEDROCK_MODELS.map((model, index) => (
-                  <Option key={index} value={model}>{model}</Option>
-                ))
-              ) : getFieldValue('model_provider') === MODEL_PROVIDERS.OPENAI ? (
-                OPENAI_MODELS.map((model, index) => (
-                  <Option key={index} value={model}>{model}</Option>
-                ))
-              ) : (
-                <Option value="custom">Custom Model</Option>
-              )}
-            </Select>
-          </Form.Item>
-        )}
+        {({ getFieldValue }) => {
+          const providerNumber = getFieldValue('model_provider');
+          const providerKey = getProviderKey(providerNumber);
+          const provider = providers.find(p => p.key === providerKey);
+          
+          return (
+            <Form.Item
+              name="model_id"
+              label="Model ID"
+              rules={[{ required: true, message: '请选择Model ID' }]}
+            >
+              <Select>
+                {provider && provider.models.length > 0 ? (
+                  provider.models.map((model, index) => (
+                    <Option key={index} value={model.config.model_id}>
+                      {model.config.model_id}
+                    </Option>
+                  ))
+                ) : (
+                  <Option value="Custom">Custom Model</Option>
+                )}
+              </Select>
+            </Form.Item>
+          );
+        }}
       </Form.Item>
-      
+
       <Form.Item
         noStyle
-        shouldUpdate={(prevValues, currentValues) => prevValues.model_provider !== currentValues.model_provider}
+        shouldUpdate={(prevValues, currentValues) => prevValues.model_id !== currentValues.model_id}
       >
-        {({ getFieldValue }) => (
-          getFieldValue('model_provider') === MODEL_PROVIDERS.OPENAI && (
-            <>
-              <Form.Item
-                name={['extras', 'base_url']}
-                label="Base URL"
-                rules={[{ required: true, message: '请输入Base URL' }]}
-              >
-                <Input placeholder="例如: https://api.openai.com/v1" />
-              </Form.Item>
-              
-              <Form.Item
-                name={['extras', 'api_key']}
-                label="API Key"
-                rules={[{ required: true, message: '请输入API Key' }]}
-              >
-                <Input.Password placeholder="请输入API Key" />
-              </Form.Item>
-            </>
-          )
-        )}
+        {
+          ({ getFieldValue }) => {
+            const providerNumber = getFieldValue('model_provider');
+            const providerKey = getProviderKey(providerNumber);
+            const provider = providers.find(p => p.key === providerKey);
+
+            const model_id = getFieldValue('model_id');
+            const model = provider?.models.find(m => m.config.model_id === model_id);
+            let extra_items = [];
+            if (model?.config.api_base_url) {
+              extra_items.push(
+                <Form.Item
+                  key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
+                  hidden
+                  name={['extras', 'base_url']}
+                  label="Base URL">
+                    <Input />
+                </Form.Item>
+              )
+            }
+            if (model?.config.api_key) {
+              extra_items.push(
+                <Form.Item
+                  key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
+                  hidden
+                  name={['extras', 'api_key']}
+                  label="API KEY">
+                    <Input />
+                </Form.Item>
+              )
+            }
+            return <>{extra_items}</>;
+          }
+        }
       </Form.Item>
       
       <Form.Item
@@ -491,7 +531,7 @@ export const AgentManager: React.FC = () => {
         <h3 style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: '10px' }}>模型信息</h3>
         <p><strong>模型提供商:</strong> {getModelProviderName(selectedAgent.model_provider)}</p>
         <p><strong>模型ID:</strong> {selectedAgent.model_id}</p>
-        {selectedAgent.model_provider === MODEL_PROVIDERS.OPENAI && selectedAgent.extras && (
+        {getProviderKey(selectedAgent.model_provider) === 'openai' && selectedAgent.extras && (
           <>
             <p><strong>Base URL:</strong> {selectedAgent.extras.base_url}</p>
             <p><strong>API Key:</strong> {'*'.repeat(10)}</p>
@@ -664,12 +704,11 @@ export const AgentManager: React.FC = () => {
               rules={[{ required: true, message: '请选择Model Provider' }]}
             >
               <Select>
-                <Option value={MODEL_PROVIDERS.BEDROCK}>Bedrock</Option>
-                <Option value={MODEL_PROVIDERS.OPENAI}>OpenAI</Option>
-                <Option value={MODEL_PROVIDERS.ANTHROPIC}>Anthropic</Option>
-                <Option value={MODEL_PROVIDERS.LITELLM}>LiteLLM</Option>
-                <Option value={MODEL_PROVIDERS.OLLAMA}>Ollama</Option>
-                <Option value={MODEL_PROVIDERS.CUSTOM}>Custom</Option>
+                {providers.map((provider) => (
+                  <Option key={provider.key} value={getProviderNumber(provider.key)}>
+                    {provider.key}
+                  </Option>
+                ))}
               </Select>
             </Form.Item>
             
@@ -677,54 +716,71 @@ export const AgentManager: React.FC = () => {
               noStyle
               shouldUpdate={(prevValues, currentValues) => prevValues.model_provider !== currentValues.model_provider}
             >
-              {({ getFieldValue }) => (
-                <Form.Item
-                  name="model_id"
-                  label="Model ID"
-                  rules={[{ required: true, message: '请选择Model ID' }]}
-                >
-                  <Select>
-                    {getFieldValue('model_provider') === MODEL_PROVIDERS.BEDROCK ? (
-                      BEDROCK_MODELS.map((model, index) => (
-                        <Option key={index} value={model}>{model}</Option>
-                      ))
-                    ) : getFieldValue('model_provider') === MODEL_PROVIDERS.OPENAI ? (
-                      OPENAI_MODELS.map((model, index) => (
-                        <Option key={index} value={model}>{model}</Option>
-                      ))
-                    ) : (
-                      <Option value="custom">Custom Model</Option>
-                    )}
-                  </Select>
-                </Form.Item>
-              )}
+              {({ getFieldValue }) => {
+                const providerNumber = getFieldValue('model_provider');
+                const providerKey = getProviderKey(providerNumber);
+                const provider = providers.find(p => p.key === providerKey);
+                
+                return (
+                  <Form.Item
+                    name="model_id"
+                    label="Model ID"
+                    rules={[{ required: true, message: '请选择Model ID' }]}
+                  >
+                    <Select>
+                      {provider && provider.models.length > 0 ? (
+                        provider.models.map((model, index) => (
+                          <Option key={index} value={model.config.model_id}>
+                            {model.config.model_id}
+                          </Option>
+                        ))
+                      ) : (
+                        <Option value="Custom">Custom Model</Option>
+                      )}
+                    </Select>
+                  </Form.Item>
+                );
+              }}
             </Form.Item>
-            
+
             <Form.Item
               noStyle
-              shouldUpdate={(prevValues, currentValues) => prevValues.model_provider !== currentValues.model_provider}
+              shouldUpdate={(prevValues, currentValues) => prevValues.model_id !== currentValues.model_id}
             >
-              {({ getFieldValue }) => (
-                getFieldValue('model_provider') === MODEL_PROVIDERS.OPENAI && (
-                  <>
-                    <Form.Item
-                      name={['extras', 'base_url']}
-                      label="Base URL"
-                      rules={[{ required: true, message: '请输入Base URL' }]}
-                    >
-                      <Input placeholder="例如: https://api.openai.com/v1" />
-                    </Form.Item>
-                    
-                    <Form.Item
-                      name={['extras', 'api_key']}
-                      label="API Key"
-                      rules={[{ required: true, message: '请输入API Key' }]}
-                    >
-                      <Input.Password placeholder="请输入API Key" />
-                    </Form.Item>
-                  </>
-                )
-              )}
+              {
+                ({ getFieldValue }) => {
+                  const providerNumber = getFieldValue('model_provider');
+                  const providerKey = getProviderKey(providerNumber);
+                  const provider = providers.find(p => p.key === providerKey);
+
+                  const model_id = getFieldValue('model_id');
+                  const model = provider?.models.find(m => m.config.model_id === model_id);
+                  let extra_items = [];
+                  if (model?.config.api_base_url) {
+                    extra_items.push(
+                      <Form.Item
+                        key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
+                        hidden
+                        name={['extras', 'base_url']}
+                        label="Base URL">
+                          <Input />
+                      </Form.Item>
+                    )
+                  }
+                  if (model?.config.api_key) {
+                    extra_items.push(
+                      <Form.Item
+                        key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
+                        hidden
+                        name={['extras', 'api_key']}
+                        label="API KEY">
+                          <Input />
+                      </Form.Item>
+                    )
+                  }
+                  return <>{extra_items}</>;
+                }
+              }
             </Form.Item>
             
             <Form.Item
