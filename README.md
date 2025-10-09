@@ -84,11 +84,6 @@ Model Context Protocol servers that extend agent capabilities:
    
    - **AgentScheduleTable**
      - Partition key: `id` (String)
-   
-   You can use DynamoDB Local for development by running:
-   ```bash
-   docker run -p 8000:8000 amazon/dynamodb-local
-   ```
 
 4. **Set up the frontend**:
    ```bash
