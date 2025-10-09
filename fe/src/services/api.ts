@@ -61,9 +61,12 @@ export const TOOL_TYPES = {
 
 // Bedrock models
 export const BEDROCK_MODELS = [
-  'us.anthropic.claude-opus-4-20250514-v1:0',
   'us.anthropic.claude-sonnet-4-20250514-v1:0',
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+  'us.anthropic.claude-opus-4-20250514-v1:0',
+  'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+  'qwen.qwen3-coder-480b-a35b-v1:0',
+  'qwen.qwen3-235b-a22b-2507-v1:0'
 ];
 
 export const OPENAI_MODELS = [
