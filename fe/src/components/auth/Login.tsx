@@ -45,7 +45,7 @@ export const Login: React.FC = () => {
           boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
           borderRadius: '12px'
         }}
-        bodyStyle={{ padding: '40px' }}
+        styles = {{ body: {padding: '40px'} }}
       >
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
           <Title level={2} style={{ color: '#1890ff', marginBottom: '8px' }}>

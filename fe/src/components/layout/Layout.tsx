@@ -8,13 +8,16 @@ import {
   MenuFoldOutlined,
   ScheduleOutlined,
   UserOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  ControlOutlined
 } from '@ant-design/icons';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { Chat } from '../chat/Chat';
-import { AgentManager } from '../agent';
+import { AgentHub } from '../agent';
 import { MCP } from '../mcp/MCP';
 import { Schedule } from '../schedule';
+import { Config } from '../config/Config';
+import { OrchestrationEditor } from '../orchestration';
 import { Login, Register, ProtectedRoute } from '../auth';
 import { useUserStore } from '../../store/userStore';
 import { userAPI } from '../../services/api';
@@ -31,12 +34,14 @@ export const Layout: React.FC = () => {
     const path = window.location.pathname;
     if (path.includes('/chat')) {
       setSelectedKey('1');
-    } else if (path.includes('/agent')) {
+    } else if (path.includes('/agent') || path.includes('/orchestration')) {
       setSelectedKey('2');
     } else if (path.includes('/mcp')) {
       setSelectedKey('3');
     } else if (path.includes('/schedule')) {
       setSelectedKey('4');
+    } else if (path.includes('/config')) {
+      setSelectedKey('5');
     }
   }, []);
 
@@ -84,6 +89,11 @@ export const Layout: React.FC = () => {
       key: '4',
       icon: <ScheduleOutlined />,
       label: <Link to="/schedule">Agent 调度</Link>,
+    },
+    {
+      key: '5',
+      icon: <ControlOutlined />,
+      label: <Link to="/config">系统配置</Link>,
     },
   ];
 
@@ -170,9 +180,13 @@ export const Layout: React.FC = () => {
               <Content style={{ background: '#fff' }}>
                 <Routes>
                   <Route path="/chat" element={<Chat />} />
-                  <Route path="/agent" element={<AgentManager />} />
+                  <Route path="/agent" element={<AgentHub />} />
                   <Route path="/mcp" element={<MCP />} />
                   <Route path="/schedule" element={<Schedule />} />
+                  <Route path="/config" element={<Config />} />
+                  <Route path="/orchestration" element={<AgentHub />} />
+                  <Route path="/orchestration/create" element={<OrchestrationEditor />} />
+                  <Route path="/orchestration/edit/:id" element={<OrchestrationEditor />} />
                   <Route path="/" element={<Navigate to="/chat" replace />} />
                 </Routes>
               </Content>
