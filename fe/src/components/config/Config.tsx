@@ -228,7 +228,9 @@ export const Config: React.FC = () => {
 
       setModalVisible(false);
       loadConfigsByParent(selectedCategory);
-      loadCategoryTree(); // Refresh tree in case new category was added
+      if(!values.parent) {
+        loadCategoryTree(); // Refresh tree in case new category was added
+      }
     } catch (error) {
       message.error(editingConfig ? '配置更新失败' : '配置创建失败');
       console.error('Error saving config:', error);

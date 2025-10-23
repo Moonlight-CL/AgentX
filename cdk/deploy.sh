@@ -14,6 +14,8 @@ usage() {
   echo "  --no-duckdb-mcp             Disable DuckDB MCP server deployment"
   echo "  --no-opensearch-mcp         Disable OpenSearch MCP server deployment"
   echo "  --no-aws-db-mcp             Disable AWS DB MCP server deployment"
+  echo "  --aws-db-mcp-cpu CPU        CPU units for AWS DB MCP server (256, 512, 1024, 2048, 4096, default: 1024)"
+  echo "  --aws-db-mcp-memory MEMORY  Memory in MiB for AWS DB MCP server (default: 2048)"
   echo "  --no-dynamodb-tables        Disable creation of DynamoDB tables for agent and MCP services"
   echo "  --help                      Display this help message"
   exit 1
@@ -27,6 +29,8 @@ DEPLOY_REDSHIFT_MCP=true
 DEPLOY_DUCKDB_MCP=true
 DEPLOY_OPENSEARCH_MCP=true
 DEPLOY_AWS_DB_MCP=true
+AWS_DB_MCP_CPU=1024
+AWS_DB_MCP_MEMORY=2048
 CREATE_DYNAMODB_TABLES=true
 
 # Parse arguments
@@ -60,6 +64,14 @@ while [[ $# -gt 0 ]]; do
       DEPLOY_AWS_DB_MCP=false
       shift
       ;;
+    --aws-db-mcp-cpu)
+      AWS_DB_MCP_CPU="$2"
+      shift 2
+      ;;
+    --aws-db-mcp-memory)
+      AWS_DB_MCP_MEMORY="$2"
+      shift 2
+      ;;
     --no-dynamodb-tables)
       CREATE_DYNAMODB_TABLES=false
       shift
@@ -88,7 +100,7 @@ echo "MySQL MCP server deployment: $([ "$DEPLOY_MYSQL_MCP" = true ] && echo "Ena
 echo "Redshift MCP server deployment: $([ "$DEPLOY_REDSHIFT_MCP" = true ] && echo "Enabled" || echo "Disabled")"
 echo "DuckDB MCP server deployment: $([ "$DEPLOY_DUCKDB_MCP" = true ] && echo "Enabled" || echo "Disabled")"
 echo "OpenSearch MCP server deployment: $([ "$DEPLOY_OPENSEARCH_MCP" = true ] && echo "Enabled" || echo "Disabled")"
-echo "AWS DB MCP server deployment: $([ "$DEPLOY_AWS_DB_MCP" = true ] && echo "Enabled" || echo "Disabled")"
+echo "AWS DB MCP server deployment: $([ "$DEPLOY_AWS_DB_MCP" = true ] && echo "Enabled (CPU: ${AWS_DB_MCP_CPU}, Memory: ${AWS_DB_MCP_MEMORY}MiB)" || echo "Disabled")"
 echo "DynamoDB tables creation: $([ "$CREATE_DYNAMODB_TABLES" = true ] && echo "Enabled" || echo "Disabled")"
 echo "Agent Schedule functionality: Enabled"
 
@@ -142,6 +154,10 @@ if [ "$DEPLOY_AWS_DB_MCP" = false ]; then
   CDK_PARAMS="$CDK_PARAMS -c deployAwsDbMcpServer=false"
   export DEPLOY_AWS_DB_MCP=false
 fi
+
+# Add AWS DB MCP container size parameters
+CDK_PARAMS="$CDK_PARAMS -c awsDbMcpCpu=$AWS_DB_MCP_CPU"
+CDK_PARAMS="$CDK_PARAMS -c awsDbMcpMemory=$AWS_DB_MCP_MEMORY"
 
 if [ "$CREATE_DYNAMODB_TABLES" = false ]; then
   CDK_PARAMS="$CDK_PARAMS -c createDynamoDBTables=false"

@@ -7,6 +7,7 @@ import { formatMessageEvent, formatToHTML } from '../utils/agentEventFormatter';
 export { useAgentStore } from './agentStore';
 export { useMCPStore } from './mcpStore';
 export { useUserStore } from './userStore';
+export { useUseCaseStore } from './useCaseStore';
 
 interface ChatState {
   // Conversations
