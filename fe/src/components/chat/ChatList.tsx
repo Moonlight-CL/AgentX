@@ -2,11 +2,7 @@ import React from 'react';
 import { Button, Space, Spin } from 'antd';
 import { Bubble, Welcome } from '@ant-design/x';
 import {
-  CopyOutlined,
-  DislikeOutlined,
   EllipsisOutlined,
-  LikeOutlined,
-  ReloadOutlined,
   ShareAltOutlined,
   InfoCircleTwoTone
 } from '@ant-design/icons';
@@ -35,21 +31,22 @@ export const ChatList: React.FC<ChatListProps> = ({ onSubmit }) => {
             classNames: {
               content: i.status === 'loading' ? styles.loadingMessage : '',
             },
+            styles: { content: {minWidth: 850} },
             typing: i.status === 'loading' ? { step: 5, interval: 20, suffix: <>💗</> } : false,
             content: <div className="markdown-content" dangerouslySetInnerHTML={{ __html: i.message.content as string }} />,
           }))}
-          style={{ height: '100%', paddingInline: 'calc(calc(100% - 900px) /2)' }}
+          style={{ height: '100%', paddingInline: 'calc(calc(100% - 900px) /2)'}}
           roles={{
             assistant: {
               placement: 'start',
-              footer: (
-                <div style={{ display: 'flex' }}>
-                  <Button type="text" size="small" icon={<ReloadOutlined />} />
-                  <Button type="text" size="small" icon={<CopyOutlined />} />
-                  <Button type="text" size="small" icon={<LikeOutlined />} />
-                  <Button type="text" size="small" icon={<DislikeOutlined />} />
-                </div>
-              ),
+              // footer: (
+              //   <div style={{ display: 'flex' }}>
+              //     <Button type="text" size="small" icon={<ReloadOutlined />} />
+              //     <Button type="text" size="small" icon={<CopyOutlined />} />
+              //     <Button type="text" size="small" icon={<LikeOutlined />} />
+              //     <Button type="text" size="small" icon={<DislikeOutlined />} />
+              //   </div>
+              // ),
               loadingRender: () => <Spin size="small" />,
             },
             user: { placement: 'end' },
@@ -94,29 +91,29 @@ export const ChatList: React.FC<ChatListProps> = ({ onSubmit }) => {
             </div>
           </div>
           <div className="agentx-welcome-container">
-            <div className="agentx-welcome-overlay-radial" />
-            <div className="agentx-welcome-overlay-linear" />
-            <div className="agentx-welcome-content">
-              <h2 className="agentx-formula">
-                <span className="component-animation" style={{ '--delay': '0s' } as React.CSSProperties}>Agent</span> = 
-                <span className="component-animation" style={{ '--delay': '1s' } as React.CSSProperties}> LLM Model</span> + 
-                <span className="component-animation" style={{ '--delay': '2s' } as React.CSSProperties}> System Prompt</span> <br/> + 
-                <span className="component-animation" style={{ '--delay': '3s' } as React.CSSProperties}> Tools</span> + 
-                <span className="component-animation" style={{ '--delay': '4s' } as React.CSSProperties}> Environment</span>
-              </h2>
-              <div className="agentx-logo">
-                AgentX
+              <div className="agentx-welcome-overlay-radial" />
+              <div className="agentx-welcome-overlay-linear" />
+              <div className="agentx-welcome-content">
+                <h2 className="agentx-formula">
+                  <span className="component-animation" style={{ '--delay': '0s' } as React.CSSProperties}>Agent</span> = 
+                  <span className="component-animation" style={{ '--delay': '1s' } as React.CSSProperties}> LLM Model</span> + 
+                  <span className="component-animation" style={{ '--delay': '2s' } as React.CSSProperties}> System Prompt</span> <br/> + 
+                  <span className="component-animation" style={{ '--delay': '3s' } as React.CSSProperties}> Tools</span> + 
+                  <span className="component-animation" style={{ '--delay': '4s' } as React.CSSProperties}> Environment</span>
+                </h2>
+                <div className="agentx-logo">
+                  AgentX
+                </div>
+                {/* Hidden button to satisfy ESLint (onSubmit must be used) */}
+                <button 
+                  onClick={() => onSubmit("Tell me about AgentX")} 
+                  style={{ display: 'none' }}
+                  aria-hidden="true"
+                >
+                  Hidden Submit
+                </button>
               </div>
-              {/* Hidden button to satisfy ESLint (onSubmit must be used) */}
-              <button 
-                onClick={() => onSubmit("Tell me about AgentX")} 
-                style={{ display: 'none' }}
-                aria-hidden="true"
-              >
-                Hidden Submit
-              </button>
             </div>
-          </div>
         </Space>
       )}
     </div>

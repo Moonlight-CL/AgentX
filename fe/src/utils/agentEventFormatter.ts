@@ -176,7 +176,7 @@ const formatMessageEvent = (event: MessageEvent): string => {
       <pre><code class="language-html">${escapeHtml(cleanedHtmlCode)}</code></pre>
     </div>
     <div class="html-tab-content html-render-content">
-      <iframe style="width: 100%; height: 500px; border: none;" sandbox="allow-scripts allow-same-origin"
+      <iframe style="width: 100%; height: 900px; border: none;" sandbox="allow-scripts allow-same-origin"
       srcdoc='${escapeHtml(cleanedHtmlCode)}'>
       </iframe>
     </div>

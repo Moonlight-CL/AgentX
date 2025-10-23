@@ -1,135 +1,189 @@
-# AWS DB Evaluation MCP Server
+# AWS RDS Pricing Analysis MCP Server
 
-This MCP (Model Context Protocol) server provides tools for analyzing RDS MySQL instances and calculating Aurora conversion and RDS replacement costs. It leverages the functionality from the `RDSAuroraMultiGenerationPricingAnalyzer` to provide pricing analysis through MCP tools and resources.
+This MCP server provides comprehensive pricing analysis tools for AWS RDS MySQL instances, including Aurora migration cost analysis and Extended Support pricing evaluation.
 
 ## Features
 
-- Analyze RDS MySQL instances and calculate Aurora conversion costs
-- Calculate RDS replacement costs with newer generation instances (r7g, r8g)
-- Get pricing information for specific RDS and Aurora instance types
-- Calculate storage costs for different storage types and configurations
-- Support for Multi-AZ and TAZ (Three Availability Zone) architectures
-- Support for RDS MySQL clusters and Aurora clusters
+### 1. Aurora Multi-Generation Pricing Analysis
+- **Tool Name**: `analyze_aurora_multi_generation_pricing`
+- **Description**: Analyzes RDS MySQL instances and calculates Aurora conversion costs with multi-generation support (r7g, r8g)
+- **Key Features**:
+  - Comprehensive pricing analysis including instance costs, storage costs, and total MRR
+  - Support for various architectures: Single-AZ, Multi-AZ, TAZ clusters, and RDS MySQL clusters
+  - Analysis includes both Aurora Standard and IO Optimized configurations
+  - CloudWatch metrics integration for accurate IO cost calculations
+  - Support for M/R/C series instances with intelligent mapping to Aurora R-series
+  - RDS replacement cost analysis with Graviton3/4 migration options
 
-## Resources
+### 2. MySQL Extended Support Pricing Analysis
+- **Tool Name**: `analyze_mysql_extended_support_pricing`
+- **Description**: Analyzes RDS MySQL instances and calculates Extended Support pricing costs for different years (1-3 years)
+- **Key Features**:
+  - Compares Extended Support costs with 1-year Reserved Instance pricing
+  - Detailed cost analysis including per-core pricing and total MRR calculations
+  - Percentage comparisons between Extended Support and Reserved Instance options
+  - Support for Multi-AZ cost adjustments
 
-The server provides the following resources:
+## Installation
 
-- `aws-db://regions` - List all AWS regions
-- `aws-db://supported-generations` - List supported instance generations for Aurora and RDS replacement
-- `aws-db://{region}/rds-instances` - List all RDS MySQL instances in a region
-- `aws-db://{region}/aurora-clusters` - List all Aurora MySQL clusters in a region
-- `aws-db://{region}/storage-pricing` - Get storage pricing information for a region
-
-## Tools
-
-The server provides the following tools:
-
-### analyze_rds_instances
-
-Analyze RDS MySQL instances and calculate Aurora conversion and RDS replacement costs.
-
-**Parameters:**
-- `region` (required): AWS region (e.g., us-east-1)
-- `output_format` (optional): Output format (json or csv), default is json
-
-**Example:**
-```json
-{
-  "region": "us-east-1",
-  "output_format": "json"
-}
-```
-
-### get_instance_pricing
-
-Get pricing information for specific RDS and Aurora instance types.
-
-**Parameters:**
-- `region` (required): AWS region (e.g., us-east-1)
-- `instance_class` (required): RDS instance class (e.g., db.r5.xlarge)
-- `aurora_generations` (optional): Aurora instance generations to check (e.g., r7g, r8g), default is ["r7g", "r8g"]
-
-**Example:**
-```json
-{
-  "region": "us-east-1",
-  "instance_class": "db.r5.xlarge",
-  "aurora_generations": ["r7g", "r8g"]
-}
-```
-
-### calculate_storage_cost
-
-Calculate storage costs for RDS and Aurora.
-
-**Parameters:**
-- `region` (required): AWS region (e.g., us-east-1)
-- `storage_type` (required): Storage type (gp2, gp3, io1, io2, magnetic)
-- `allocated_storage_gb` (required): Allocated storage in GB
-- `iops` (optional): Provisioned IOPS (for io1, io2, gp3), default is 0
-- `throughput_mbps` (optional): Provisioned throughput in MB/s (for gp3), default is 0
-- `is_multi_az` (optional): Whether the instance is Multi-AZ, default is false
-- `is_aurora_migration` (optional): Whether this is for Aurora migration calculation, default is false
-
-**Example:**
-```json
-{
-  "region": "us-east-1",
-  "storage_type": "gp3",
-  "allocated_storage_gb": 100,
-  "iops": 3000,
-  "throughput_mbps": 125,
-  "is_multi_az": true,
-  "is_aurora_migration": true
-}
-```
-
-## Running the Server
-
-### Prerequisites
-
-- Python 3.8+
-- AWS credentials configured (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION)
-- Required Python packages: boto3, mcp, anyio, click, starlette, uvicorn
-
-### Starting the Server
-
-You can run the server using either stdio or HTTP transport:
-
-#### Using stdio (default)
-
+1. Ensure you have the required dependencies installed:
 ```bash
-python -m db_evaluation_server
+pip install mcp boto3 click anyio starlette uvicorn pandas openpyxl
 ```
 
-#### Using HTTP
+2. Set up AWS credentials with appropriate permissions for:
+   - RDS instance discovery (`rds:DescribeDBInstances`, `rds:DescribeDBClusters`)
+   - CloudWatch metrics access (`cloudwatch:GetMetricStatistics`)
+   - Pricing API access (`pricing:GetProducts`)
 
+## Usage
+
+### Running the Server
+
+#### STDIO Transport (Default)
 ```bash
-python -m db_evaluation_server --transport http --port 3001
+python -m mcp.aws-db.db_evaluation_server.pricing_analysis_server
 ```
 
-### Environment Variables
-
-The server uses the following environment variables:
-
-- `AWS_REGION`: AWS region (default: us-east-1)
-- `AWS_ACCESS_KEY_ID`: AWS access key ID
-- `AWS_SECRET_ACCESS_KEY`: AWS secret access key
-- `AWS_SESSION_TOKEN`: AWS session token (optional)
-
-You can set these variables in a `.env` file and specify the path using the `--env_file` option:
-
+#### HTTP Transport
 ```bash
-python -m db_evaluation_server --env_file /path/to/.env
+python -m mcp.aws-db.db_evaluation_server.pricing_analysis_server --transport http --port 3002
 ```
 
-## Testing
+### Tool Parameters
 
-You can test the server functionality using the provided test script:
+#### analyze_aurora_multi_generation_pricing
+- **region** (required): AWS region for analysis (e.g., "us-east-1", "ap-northeast-1")
+- **output_format** (optional): Output format - "json", "csv", or "markdown" (default: "json")
+- **output_file** (optional): Custom output file path (auto-generated if not provided)
 
-```bash
-python test_db_evaluation_server.py --region us-east-1
+#### analyze_mysql_extended_support_pricing
+- **region** (required): AWS region for analysis (e.g., "us-east-1", "ap-northeast-1")
+- **output_format** (optional): Output format - "json", "csv", or "markdown" (default: "json")
+- **output_file** (optional): Custom output file path (auto-generated if not provided)
+
+### Example Usage with MCP Client
+
+```python
+# Aurora Multi-Generation Analysis
+result = await mcp_client.call_tool(
+    "analyze_aurora_multi_generation_pricing",
+    {
+        "region": "us-east-1",
+        "output_format": "json"
+    }
+)
+
+# Extended Support Analysis
+result = await mcp_client.call_tool(
+    "analyze_mysql_extended_support_pricing",
+    {
+        "region": "ap-northeast-1",
+        "output_format": "csv",
+        "output_file": "extended_support_analysis.csv"
+    }
+)
 ```
 
-This script tests the core functionality of the RDS Aurora pricing analyzer without requiring the MCP server to be running.
+## Output Formats
+
+### JSON Format
+Returns detailed analysis results as structured JSON data, suitable for programmatic processing.
+
+### CSV Format
+Exports results to Excel files (.xlsx) with multiple sheets:
+- **详细数据**: Complete instance-level analysis
+- **cluster成本汇总**: Cluster-level cost summaries
+
+### Markdown Format
+Generates human-readable reports with:
+- Executive summary tables
+- Detailed instance analysis
+- Cost comparison charts
+
+## Architecture Support
+
+### Aurora Multi-Generation Analysis
+- **Single-AZ**: Standard single availability zone instances
+- **Multi-AZ**: Multi availability zone deployments
+- **TAZ Clusters**: Three availability zone Aurora clusters
+- **RDS MySQL Clusters**: Read replica configurations
+
+### Instance Type Support
+- **M-Series**: General purpose instances (mapped to Aurora R-series)
+- **R-Series**: Memory optimized instances
+- **C-Series**: Compute optimized instances (mapped to Aurora R-series)
+
+### Migration Scenarios
+1. **Aurora Migration**: All instance types → Aurora r7g/r8g
+2. **Graviton Migration**: 
+   - M/C series → m7g/m8g
+   - R series → r7g/r8g
+
+## Cost Calculations
+
+### Aurora Analysis
+- **Instance MRR**: Monthly recurring revenue for Aurora instances
+- **Storage MRR**: Aurora storage costs based on actual usage
+- **IO MRR**: Aurora IO costs based on CloudWatch IOPS metrics
+- **Total MRR**: Combined instance + storage + IO costs
+- **Standard vs Optimized**: Both Aurora configurations analyzed
+
+### Extended Support Analysis
+- **Per-Core Pricing**: Extended Support costs calculated per CPU core
+- **Multi-AZ Adjustments**: Automatic cost doubling for Multi-AZ deployments
+- **Year-over-Year Analysis**: 1-3 year Extended Support cost projections
+- **RI Comparison**: Percentage difference vs Reserved Instance pricing
+
+## Logging
+
+The server generates detailed logs in `aws_rds_pricing_analysis_mcp_log.out` including:
+- Analysis progress and timing
+- API call results and caching
+- Error handling and debugging information
+- Cost calculation details
+
+## Error Handling
+
+The server includes comprehensive error handling for:
+- Invalid AWS regions
+- Missing AWS credentials
+- API rate limiting and throttling
+- Instance type mapping failures
+- Pricing data unavailability
+
+## Performance Optimization
+
+- **Caching**: Extensive caching of pricing data and instance information
+- **Batch Processing**: Efficient bulk API calls for large instance sets
+- **Parallel Analysis**: Concurrent processing of multiple instances
+- **Smart Filtering**: Automatic filtering of unsupported instance types
+
+## Security Considerations
+
+- Uses AWS SDK credential chain for secure authentication
+- No sensitive data stored in logs or output files
+- Supports IAM role-based access control
+- Minimal required permissions for operation
+
+## Troubleshooting
+
+### Common Issues
+
+1. **No instances found**: Verify region parameter and AWS credentials
+2. **Pricing data unavailable**: Check internet connectivity and AWS Pricing API access
+3. **Permission errors**: Ensure IAM permissions for RDS, CloudWatch, and Pricing APIs
+4. **Memory issues**: For large instance sets, consider processing by region
+
+### Debug Mode
+
+Enable detailed logging by setting the log level to DEBUG in the server configuration.
+
+## Contributing
+
+When extending the server:
+1. Follow the existing code structure and patterns
+2. Add comprehensive error handling
+3. Include detailed logging for debugging
+4. Update this README with new features
+5. Test with various AWS regions and instance configurations
