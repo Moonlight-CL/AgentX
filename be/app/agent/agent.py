@@ -377,6 +377,7 @@ class AgentPOService:
 
             model = BedrockModel(
                 model_id=agent.model_id,
+                region_name=get_aws_region(),
                 boto_client_config=boto_config,
             )
         elif agent.model_provider == ModelProvider.openai:
