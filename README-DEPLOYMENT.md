@@ -167,6 +167,9 @@ Available options:
 - `--no-redshift-mcp`: Disable Redshift MCP server deployment
 - `--no-duckdb-mcp`: Disable DuckDB MCP server deployment
 - `--no-opensearch-mcp`: Disable OpenSearch MCP server deployment
+- `--no-aws-db-mcp`: Disable AWS DB MCP server deployment
+- `--aws-db-mcp-cpu CPU`: CPU units for AWS DB MCP server (256, 512, 1024, 2048, 4096, default: 1024)
+- `--aws-db-mcp-memory MEMORY`: Memory in MiB for AWS DB MCP server (default: 2048)
 - `--no-dynamodb-tables`: Disable creation of DynamoDB tables
 
 ##### Option B: Manual CDK Deployment
@@ -191,35 +194,48 @@ cdk --app "npx ts-node --prefer-ts-exts bin/cdk-combined.ts" deploy AgentXStack
 
 The CDK deployment creates the following DynamoDB tables with user authentication and data isolation support:
 
-#### UserTable
+**Core Tables:**
+
+#### UserTable (User authentication and management)
 - **Partition Key**: `user_id` (String)
-- **Global Secondary Index**: `username-index`
-  - Partition Key: `username` (String)
 - **Purpose**: Stores user authentication information including hashed passwords, salts, and user metadata
 
-#### ChatRecordTable
+#### AgentTable (Agent configurations and metadata)
 - **Partition Key**: `id` (String)
-- **Global Secondary Index**: `user-id-index`
-  - Partition Key: `user_id` (String)
-  - Sort Key: `create_time` (String)
+- **Purpose**: Stores agent configurations and metadata
+
+#### ChatRecordTable (Chat session records)
+- **Partition Key**: `user_id` (String)
+- **Sort Key**: `id` (String)
 - **Purpose**: Stores chat conversation records with user isolation support
 
-#### ChatResponseTable
+#### ChatResponseTable (Individual chat messages and responses)
 - **Partition Key**: `id` (String)
 - **Sort Key**: `resp_no` (Number)
 - **Purpose**: Stores agent responses for each chat conversation
 
-#### AgentTable
-- **Partition Key**: `id` (String)
-- **Purpose**: Stores agent configurations and metadata
+**MCP and Advanced Features:**
 
-#### HttpMCPTable
+#### HttpMCPTable (MCP server configurations)
 - **Partition Key**: `id` (String)
 - **Purpose**: Stores MCP server configurations
 
-#### AgentScheduleTable
+#### AgentScheduleTable (Scheduled agent tasks)
 - **Partition Key**: `id` (String)
 - **Purpose**: Stores scheduled agent task configurations
+
+**Additional Tables** (used by orchestration and configuration features):
+
+#### OrcheTable (Orchestration workflows)
+- **Partition Key**: `user_id` (String)
+- **Sort Key**: `id` (String)
+- **Purpose**: Stores orchestration workflow definitions with user isolation
+
+#### ConfTable (System configurations)
+- **Partition Key**: `key` (String)
+- **Purpose**: Stores system-wide configuration settings
+
+> **Note**: All tables use pay-per-request billing mode and are configured with appropriate retention policies for production use.
 
 ### 4. User Authentication Features
 
