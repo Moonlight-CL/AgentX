@@ -31,7 +31,8 @@ def list_chat_responses(chat_id: str, current_user: dict = Depends(get_current_u
     user_id = current_user.get('user_id', 'public')
     chat_record = chat_service.get_chat_record(user_id, chat_id)
     if chat_record:
-        return chat_service.get_all_chat_responses(chat_id)
+        # Use session-based approach to get chat responses
+        return chat_service.get_all_chat_responses_from_session(chat_id, chat_record.agent_id)
     return []
 
 # delete chat record

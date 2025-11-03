@@ -1,5 +1,6 @@
 import type { AgentEvent, EventEvent, MessageEvent, InitEvent } from '../types';
 import { getEventType } from '../types';
+import { fileAPI } from '../services/api';
 import MarkdownIt from 'markdown-it';
 // Import highlight.js for code highlighting
 import hljs from 'highlight.js';
@@ -137,9 +138,108 @@ const extractHtmlCodeBlocks = (text: string): { htmlCode: string, fullMatch: str
   return matches;
 };
 
+// Helper function to generate file download link with JavaScript handler
+const generateFileDownloadLink = (s3key: string, filename: string, fileType: 'image' | 'video' | 'document'): string => {
+  const iconMap = {
+    image: '🖼️',
+    video: '🎥',
+    document: '📄'
+  };
+  
+  // Generate a unique ID for this download link
+  const linkId = `file-download-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  
+  // Create a clickable span with JavaScript handler instead of a direct link
+  return `<span id="${linkId}" class="file-download-link" style="color: #1890ff; cursor: pointer; text-decoration: underline;" onclick="downloadFile('${s3key}', '${filename}')">${iconMap[fileType]} ${filename}</span>`;
+};
+
+// Add global download function to window object
+if (typeof window !== 'undefined') {
+  (window as any).downloadFile = async (s3key: string, filename: string) => {
+    // Find the clicked element to show loading state
+    const clickedElement = document.querySelector(`[onclick*="${s3key}"]`) as HTMLElement;
+    
+    try {
+      // Show loading state
+      if (clickedElement) {
+        clickedElement.classList.add('downloading');
+        clickedElement.style.pointerEvents = 'none';
+      }
+      
+      // Use fileAPI to download with proper authentication
+      const blob = await fileAPI.downloadFile(s3key);
+      
+      // Create a temporary URL for the blob
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create a temporary anchor element and trigger download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        alert('认证失败，请重新登录后再试。');
+      } else if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
+        alert('文件未找到，可能已被删除。');
+      } else {
+        alert('文件下载失败，请稍后重试。');
+      }
+    } finally {
+      // Remove loading state
+      if (clickedElement) {
+        clickedElement.classList.remove('downloading');
+        clickedElement.style.pointerEvents = '';
+      }
+    }
+  };
+}
+
+// Helper function to format file content
+const formatFileContent = (content: any, contentType: 'image' | 'video' | 'document'): string => {
+  const source = content.source;
+  let result = '';
+  
+  // Check if we have s3key (file stored in S3)
+  if (source.s3key) {
+    const filename = content.name ? `${content.name}.${content.format}` : `${contentType}.${content.format}`;
+    result += generateFileDownloadLink(source.s3key, filename, contentType);
+  }
+  // Check if we have bytes data (inline file data)
+  else if (source.bytes && source.bytes.data) {
+    const filename = content.name || `${contentType}.${content.format}`;
+    
+    if (contentType === 'image') {
+      // For images, we can display them inline using data URL
+      const dataUrl = `data:image/${content.format};base64,${source.bytes.data}`;
+      result += `![${filename}](${dataUrl})\n\n`;
+      result += `[📥 Download ${filename}](${dataUrl})`;
+    } else {
+      // For videos and documents, just show download link
+      const dataUrl = `data:${contentType === 'video' ? 'video' : 'application'}/${content.format};base64,${source.bytes.data}`;
+      result += `[${contentType === 'video' ? '🎥' : '📄'} ${filename}](${dataUrl})`;
+    }
+  }
+  
+  return result;
+};
+
 // Format message event
 const formatMessageEvent = (event: MessageEvent): string => {
-  const message = event.message;
+  const message = event.message; 
   let result = '';
   
   message.content.forEach((content, index) => {
@@ -189,8 +289,23 @@ const formatMessageEvent = (event: MessageEvent): string => {
         result += processedText;
       } else {
         // No HTML code blocks, just add the text as is
-        result += text;
+        result += formatToHTML(text);
       }
+    }
+    
+    // Handle image content
+    if (content.image) {
+      result += '\n' + formatFileContent(content.image, 'image');
+    }
+    
+    // Handle video content
+    if (content.video) {
+      result += '\n' + formatFileContent(content.video, 'video');
+    }
+    
+    // Handle document content
+    if (content.document) {
+      result += '\n' + formatFileContent(content.document, 'document');
     }
     
     if (content.toolUse) {

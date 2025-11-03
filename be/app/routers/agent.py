@@ -2,11 +2,14 @@ from datetime import datetime
 import uuid
 import json
 
-from fastapi import APIRouter, Request, BackgroundTasks
+from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import List, Dict, Tuple, Optional, AsyncGenerator
 from ..agent.agent import AgentPO, AgentType, ModelProvider, AgentTool, AgentPOService, ChatRecord, ChatResponse, ChatRecordService
 from ..agent.event_serializer import EventSerializer
+from ..utils.s3_storage import S3StorageService
+from ..utils.content_converter import ContentConverter
+from ..user.auth import get_current_user
 
 agent_service = AgentPOService()
 chat_reccord_service = ChatRecordService()
@@ -18,43 +21,49 @@ router = APIRouter(
 )
 
 @router.get("/list")
-def list_agents() -> List[AgentPO]:
+def list_agents(current_user: dict = Depends(get_current_user)) -> List[AgentPO]:
     """
-    List all agents.
+    List all agents for the current user.
     :return: A list of agents.
     """
-    return agent_service.list_agents()
+    user_id = current_user.get('user_id', 'public')
+    return agent_service.list_agents(user_id)
 
 @router.get("/get/{agent_id}")
-def get_agent(agent_id: str) -> AgentPO:
+def get_agent(agent_id: str, current_user: dict = Depends(get_current_user)) -> AgentPO:
     """
     Get a specific agent by ID.
     :param agent_id: The ID of the agent to retrieve.
     :return: Details of the specified agent.
     """
-    return agent_service.get_agent(agent_id)
+    user_id = current_user.get('user_id', 'public')
+    agent = agent_service.get_agent(user_id, agent_id)
+    if not agent:
+        raise ValueError(f"Agent with ID {agent_id} not found.")
+    return agent
 
 @router.delete("/delete/{agent_id}")
-def delete_agent(agent_id: str) -> bool:
+def delete_agent(agent_id: str, current_user: dict = Depends(get_current_user)) -> bool:
     """
     Delete a specific agent by ID.
     :param agent_id: The ID of the agent to delete.
     :return: True if deletion was successful, False otherwise.
     """
-    return agent_service.delete_agent(agent_id)
+    user_id = current_user.get('user_id', 'public')
+    return agent_service.delete_agent(user_id, agent_id)
 
 @router.post("/createOrUpdate")
-async def create_agent(request: Request) -> AgentPO:
+async def create_agent(request: Request, current_user: dict = Depends(get_current_user)) -> AgentPO:
     """
     Create a new agent.
     :param agent: The agent data to create.
     :return: Confirmation of agent creation.
     """
-    
+    user_id = current_user.get('user_id', 'public')
     agent = await request.json()
     agent_id = uuid.uuid4().hex
     if agent and agent.get("id"):
-        agent_service.delete_agent(agent["id"])
+        agent_service.delete_agent(user_id, agent["id"])
         agent_id = agent["id"]
 
     tools = []
@@ -74,44 +83,99 @@ async def create_agent(request: Request) -> AgentPO:
         envs=agent.get("envs", ""),
         extras=agent.get("extras"),
     )
-    agent_service.add_agent(agent_po)
+    agent_service.add_agent(agent_po, user_id)
     return agent_po
 
-async def parse_chat_request_and_add_record(request: Request) -> Tuple[Optional[str], Optional[str], str, bool]:
+async def parse_chat_request_and_add_record(request: Request) -> Tuple[Optional[str], Optional[str], str, bool, str, Optional[List[Dict]]]:
     """
-    Parse a chat request to extract agent_id, user_message, and create a chat record.
+    Parse a chat request to extract agent_id, user_message, file_attachments, and handle chat record.
     
     :param request: The request containing the chat parameters.
-    :return: A tuple of (agent_id, user_message, chat_id, chat_record_enabled).
+    :return: A tuple of (agent_id, user_message, chat_id, chat_record_enabled, user_id, file_attachments).
     """
     data = await request.json()
     agent_id = data.get("agent_id")
     user_message = data.get("user_message")
+    file_attachments = data.get("file_attachments", [])  # List of file info from S3 uploads
+    chat_record_id = data.get("chat_record_id")  # New parameter for continuing conversation
     chat_record_enabled = data.get("chat_record_enabled", True)  # Default to True if not provided
     
     # Get current user from request state (set by AuthMiddleware)
     current_user = getattr(request.state, 'current_user', None)
     user_id = current_user.get('user_id', '') if current_user else ''
     
-    # Create a chat record if chat_record_enabled is True
-    chat_id = uuid.uuid4().hex
-    if chat_record_enabled:
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        chat_record = ChatRecord(
-            id=chat_id, 
-            agent_id=agent_id, 
-            user_id=user_id,  # Added user_id from authenticated user
-            user_message=user_message, 
-            create_time=current_time
-        )
-        chat_reccord_service.add_chat_record(chat_record)
+    # Handle chat record creation or continuation
+    if chat_record_id:
+        # Check if the chat record exists
+        existing_record = chat_reccord_service.get_chat_record(user_id, chat_record_id)
+        if existing_record:
+            # Use existing chat record ID as session ID
+            chat_id = chat_record_id
+        else:
+            # Chat record doesn't exist, create a new one
+            chat_id = uuid.uuid4().hex
+            if chat_record_enabled:
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                chat_record = ChatRecord(
+                    id=chat_id, 
+                    agent_id=agent_id, 
+                    user_id=user_id,
+                    user_message=user_message, 
+                    create_time=current_time
+                )
+                chat_reccord_service.add_chat_record(chat_record)
+    else:
+        # Create a new chat record
+        chat_id = uuid.uuid4().hex
+        if chat_record_enabled:
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            chat_record = ChatRecord(
+                id=chat_id, 
+                agent_id=agent_id, 
+                user_id=user_id,
+                user_message=user_message, 
+                create_time=current_time
+            )
+            chat_reccord_service.add_chat_record(chat_record)
     
-    return agent_id, user_message, chat_id, chat_record_enabled
+    return agent_id, user_message, chat_id, chat_record_enabled, user_id, file_attachments
 
-async def process_chat_events(agent_id: str, user_message: str, chat_id: str, chat_record_enabled: bool = True) -> AsyncGenerator[Dict, None]:
+async def process_chat_events_with_session(user_id: str, agent_id: str, user_input: str, chat_id: str, file_attachments: Optional[List[Dict]] = None, chat_record_enabled: bool = True) -> AsyncGenerator[Dict, None]:
+    """
+    Process chat events using session management. Chat content is automatically stored in ChatSessionTable via DynamoDBSessionRepository.
+    
+    :param user_id: The user ID for data isolation.
+    :param agent_id: The ID of the agent to chat with.
+    :param user_input: The user's message or content blocks to process.
+    :param chat_id: The ID of the chat record (used as session_id).
+    :param file_attachments: List of file attachment info from S3.
+    :param chat_record_enabled: Whether chat recording is enabled (for compatibility).
+    :yield: Chat events.
+    """
+    agent = agent_service.get_agent(user_id, agent_id)
+    if not agent:
+        raise ValueError(f"Agent with ID {agent_id} not found.")
+    
+    # Build agent with session management using chat_id as session_id
+    agent_instance = agent_service.build_strands_agent_with_session(agent, chat_id)
+    
+    # Convert text and files to content blocks if files are present
+    if file_attachments:
+        content_converter = ContentConverter()
+        content_blocks = content_converter.create_content_blocks(user_input, file_attachments)
+        # Stream events with content blocks
+        async for event in agent_instance.stream_async(content_blocks):
+            yield event
+    else:
+        # Stream events with plain text - session management automatically handles message storage
+        async for event in agent_instance.stream_async(user_input):
+            yield event
+
+async def process_chat_events(user_id: str, agent_id: str, user_message: str, chat_id: str, chat_record_enabled: bool = True) -> AsyncGenerator[Dict, None]:
     """
     Process chat events and save responses to the database if chat_record_enabled is True.
     
+    :param user_id: The user ID for data isolation.
     :param agent_id: The ID of the agent to chat with.
     :param user_message: The user's message to process.
     :param chat_id: The ID of the chat record.
@@ -119,7 +183,7 @@ async def process_chat_events(agent_id: str, user_message: str, chat_id: str, ch
     :yield: Chat events.
     """
     resp_no = 0
-    async for event in agent_service.stream_chat(agent_id, user_message):
+    async for event in agent_service.stream_chat(user_id, agent_id, user_message):
         if chat_record_enabled and ("message" in event and "role" in event["message"]):
             chat_resp = ChatResponse(
                 chat_id=chat_id, 
@@ -134,11 +198,11 @@ async def process_chat_events(agent_id: str, user_message: str, chat_id: str, ch
 @router.post("/stream_chat")
 async def stream_chat(request: Request) -> StreamingResponse:
     """
-    Stream chat messages from an agent.
+    Stream chat messages from an agent using session management.
     :param request: The request containing the chat parameters.
     :return: A stream of chat messages.
     """
-    agent_id, user_message, chat_id, chat_record_enabled = await parse_chat_request_and_add_record(request)
+    agent_id, user_message, chat_id, chat_record_enabled, user_id, file_attachments = await parse_chat_request_and_add_record(request)
     
     if not agent_id or not user_message:
         return "Agent ID and user message are required."
@@ -147,7 +211,37 @@ async def stream_chat(request: Request) -> StreamingResponse:
         """
         Generator function to yield SSE formatted events.
         """
-        async for event in process_chat_events(agent_id, user_message, chat_id, chat_record_enabled):
+        # First, send the chat_id to the frontend for session tracking
+        chat_id_event = {"chat_id": chat_id}
+        yield EventSerializer.format_as_sse(chat_id_event)
+        
+        # Then stream the actual chat events
+        async for event in process_chat_events_with_session(user_id, agent_id, user_message, chat_id, file_attachments, chat_record_enabled):
+            # Format the event as an SSE
+            yield EventSerializer.format_as_sse(event)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream"
+    )
+
+@router.post("/stream_chat_legacy")
+async def stream_chat_legacy(request: Request) -> StreamingResponse:
+    """
+    Stream chat messages from an agent using legacy approach (without session management).
+    :param request: The request containing the chat parameters.
+    :return: A stream of chat messages.
+    """
+    agent_id, user_message, chat_id, chat_record_enabled, user_id, file_attachments = await parse_chat_request_and_add_record(request)
+    
+    if not agent_id or not user_message:
+        return "Agent ID and user message are required."
+    
+    async def event_generator():
+        """
+        Generator function to yield SSE formatted events.
+        """
+        async for event in process_chat_events(user_id, agent_id, user_message, chat_id, chat_record_enabled):
             # Format the event as an SSE
             yield EventSerializer.format_as_sse(event)
     
@@ -166,7 +260,7 @@ async def async_chat(request: Request, background_tasks: BackgroundTasks) -> JSO
     :param background_tasks: FastAPI's BackgroundTasks for background processing.
     :return: A JSON response with the chat ID.
     """
-    agent_id, user_message, chat_id, chat_record_enabled = await parse_chat_request_and_add_record(request)
+    agent_id, user_message, chat_id, chat_record_enabled, user_id, file_attachments = await parse_chat_request_and_add_record(request)
     
     if not agent_id or not user_message:
         return JSONResponse(
@@ -177,6 +271,7 @@ async def async_chat(request: Request, background_tasks: BackgroundTasks) -> JSO
     # Add the processing task to background tasks
     background_tasks.add_task(
         process_chat_in_background,
+        user_id=user_id,
         agent_id=agent_id,
         user_message=user_message,
         chat_id=chat_id,
@@ -192,17 +287,18 @@ async def async_chat(request: Request, background_tasks: BackgroundTasks) -> JSO
         }
     )
 
-async def process_chat_in_background(agent_id: str, user_message: str, chat_id: str, chat_record_enabled: bool = True):
+async def process_chat_in_background(user_id: str, agent_id: str, user_message: str, chat_id: str, chat_record_enabled: bool = True):
     """
     Process a chat message in the background.
     
+    :param user_id: The user ID for data isolation.
     :param agent_id: The ID of the agent to chat with.
     :param user_message: The user's message to process.
     :param chat_id: The ID of the chat record.
     :param chat_record_enabled: Whether to save chat responses to the database.
     """
     try:
-        async for _ in process_chat_events(agent_id, user_message, chat_id, chat_record_enabled):
+        async for _ in process_chat_events(user_id, agent_id, user_message, chat_id, chat_record_enabled):
             pass  # We just need to consume the generator
         print(f"Background processing completed for chat {chat_id}")
     except Exception as e:
@@ -210,9 +306,10 @@ async def process_chat_in_background(agent_id: str, user_message: str, chat_id: 
         print(f"Error in background processing for chat {chat_id}: {str(e)}")
 
 @router.get("/tool_list")
-def available_agent_tools() -> List[AgentTool]:
+def available_agent_tools(current_user: dict = Depends(get_current_user)) -> List[AgentTool]:
     """
-    List all available agent tools.
+    List all available agent tools for the current user.
     :return: A list of available agent tools.
     """
-    return agent_service.get_all_available_tools()
+    user_id = current_user.get('user_id', 'public')
+    return agent_service.get_all_available_tools(user_id)

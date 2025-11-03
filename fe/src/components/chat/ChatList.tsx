@@ -4,7 +4,9 @@ import { Bubble, Welcome } from '@ant-design/x';
 import {
   EllipsisOutlined,
   ShareAltOutlined,
-  InfoCircleTwoTone
+  InfoCircleTwoTone,
+  UserOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { useStyles } from '../../styles';
 import { useChatStore } from '../../store';
@@ -12,6 +14,7 @@ import '../../styles/markdown.css';
 import '../../styles/tool-result.css';
 import '../../styles/highlight.css';
 import '../../styles/agentx-welcome.css';
+import { formatToHTML } from '../../utils/agentEventFormatter';
 
 interface ChatListProps {
   onSubmit: (text: string) => void;
@@ -19,26 +22,33 @@ interface ChatListProps {
 
 export const ChatList: React.FC<ChatListProps> = ({ onSubmit }) => {
   const { styles } = useStyles();
-  const { messages } = useChatStore();
+  const messages  = useChatStore(state => state.messages);
 
   return (
     <div className={styles.chatList}>
       {messages?.length ? (
         /* Message List */
         <Bubble.List
-          items={messages?.map((i) => ({
+          items={messages?.map((i) => {
+            const msg: any = i.message;
+            const isUserInput = msg.userinput ? msg.userinput === 'true' : false;
+            const htmlContent = msg.role ==='user' && isUserInput ? formatToHTML(msg.content) : msg.content as string;
+
+            return {
             ...i.message,
             classNames: {
               content: i.status === 'loading' ? styles.loadingMessage : '',
             },
             styles: { content: {minWidth: 850} },
             typing: i.status === 'loading' ? { step: 5, interval: 20, suffix: <>💗</> } : false,
-            content: <div className="markdown-content" dangerouslySetInnerHTML={{ __html: i.message.content as string }} />,
-          }))}
+            content: <div className="markdown-content" dangerouslySetInnerHTML={{ __html: htmlContent }} />,
+          };
+        })}
           style={{ height: '100%', paddingInline: 'calc(calc(100% - 900px) /2)'}}
           roles={{
             assistant: {
               placement: 'start',
+              avatar: {icon: <RobotOutlined/>, style: {background: '#fde3cf', color: '#f56a00'} },
               // footer: (
               //   <div style={{ display: 'flex' }}>
               //     <Button type="text" size="small" icon={<ReloadOutlined />} />
@@ -49,7 +59,10 @@ export const ChatList: React.FC<ChatListProps> = ({ onSubmit }) => {
               // ),
               loadingRender: () => <Spin size="small" />,
             },
-            user: { placement: 'end' },
+            user: { 
+              placement: 'end',
+              avatar: {icon: <UserOutlined/>, style: { background: '#87d068', color: '#fff' }},
+            },
           }}
         />
       ) : (
@@ -85,8 +98,10 @@ export const ChatList: React.FC<ChatListProps> = ({ onSubmit }) => {
                 System Updates
               </div>
               <div className="system-update-description">
-                 1. AgentCore Browser Use and Code Interpreter tools are now available! 🎉🎉🎉 <br/>
-                 2. OpenSearch MCP Server is now available! 🎉🎉🎉
+                 1. AgentX now supports chat with files 🎉🎉🎉 <br/>
+                 2. Use Dynamodb as Strands repository session manager storage 🎉🎉🎉 <br/>
+                 3. AgentCore Browser Use and Code Interpreter tools are now available! 🎉🎉🎉 <br/>
+                 4. OpenSearch MCP Server / Athena MCP Server is now available! 🎉🎉🎉
               </div>
             </div>
           </div>

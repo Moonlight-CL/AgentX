@@ -173,32 +173,55 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const currentMessageEvents = events as MessageEvent[];
         let htmlContent = '';
 
+        // const historyMsgs = get().messages;
+
+        const messages = [];
+
         if (currentMessageEvents.length > 0) {
           for (const msgEvent of currentMessageEvents) {
+
+            let isUserInput = msgEvent.message.role === 'user' && msgEvent.message.content.find(part => part.toolResult === undefined);
             const formatted = formatMessageEvent(msgEvent);
-            htmlContent += formatToHTML(formatted);
+            if (isUserInput) {
+              if (htmlContent !== '') {
+                // Assistant response message
+                messages.push(
+                  {
+                    message: {
+                      role: 'assistant',
+                      content: htmlContent
+                    },
+                    status: 'done' as const
+                  }
+                );
+                htmlContent = '';
+              }
+              // User input message
+              messages.push({
+                message: {
+                  role: 'user',
+                  content: formatted
+                },
+                status: 'done' as const
+              });
+
+            } else {
+              htmlContent += formatToHTML(formatted);
+            }
           }
-          
+          if (htmlContent !== '') {
+            messages.push(
+              {
+                message: {
+                  role: 'assistant',
+                  content: htmlContent
+                },
+                status: 'done' as const
+              }
+            );
+          }
         }
-        
-        // Create messages from the responses
-        const messages = [
-          {
-            message: {
-              role: 'user',
-              content: chatRecord!.user_message
-            },
-            status: 'done' as const
-          },
-          {
-            message: {
-              role: 'assistant',
-              content: htmlContent
-            },
-            status: 'done' as const
-          }
-      ];
-        
+        // const allMsgs   = historyMsgs.concat(messages)
         set({ messages });
       }
     } catch (error) {
@@ -206,10 +229,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
   createNewConversation: () => {
-    // Reset messages and selectedAgent
+    // Reset messages, selectedAgent, and currentChatId for new conversation
     set({
       messages: [],
-      selectedAgent: null
+      agentEvents: [],
+      selectedAgent: null,
+      currentChatId: null
     });
   },
   
@@ -226,7 +251,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         
         // Reset messages if the deleted chat was the current one
         if (currentChatId === key) {
-          set({ 
+          set({
+            selectedAgent: null,
             messages: [],
             currentChatId: null,
             agentEvents: []

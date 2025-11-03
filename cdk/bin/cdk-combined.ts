@@ -16,6 +16,10 @@ const deployDuckDbMcpServer = app.node.tryGetContext('deployDuckDbMcpServer') !=
 const deployOpenSearchMcpServer = app.node.tryGetContext('deployOpenSearchMcpServer') !== 'false' && process.env.DEPLOY_OPENSEARCH_MCP !== 'false';
 const createDynamoDBTables = app.node.tryGetContext('createDynamoDBTables') !== 'false' && process.env.CREATE_DYNAMODB_TABLES !== 'false';
 
+// S3 configuration parameters
+const s3BucketName = app.node.tryGetContext('s3BucketName') || process.env.S3_BUCKET_NAME || 'agentx-files-bucket';
+const s3FilePrefix = app.node.tryGetContext('s3FilePrefix') || process.env.S3_FILE_PREFIX || 'agentx/files';
+
 // Create the combined AgentX stack
 new AgentXStack(app, 'AgentXStack', {
   env: { 
@@ -30,6 +34,8 @@ new AgentXStack(app, 'AgentXStack', {
   deployDuckDbMcpServer: deployDuckDbMcpServer,
   deployOpenSearchMcpServer: deployOpenSearchMcpServer,
   createDynamoDBTables: createDynamoDBTables,
+  s3BucketName: s3BucketName,
+  s3FilePrefix: s3FilePrefix,
 });
 
 // Log configuration
@@ -41,3 +47,5 @@ console.log(`Redshift MCP server deployment: ${deployRedshiftMcpServer ? 'Enable
 console.log(`DuckDB MCP server deployment: ${deployDuckDbMcpServer ? 'Enabled' : 'Disabled'}`);
 console.log(`OpenSearch MCP server deployment: ${deployOpenSearchMcpServer ? 'Enabled' : 'Disabled'}`);
 console.log(`DynamoDB tables creation: ${createDynamoDBTables ? 'Enabled' : 'Disabled'}`);
+console.log(`S3 bucket name: ${s3BucketName}`);
+console.log(`S3 file prefix: ${s3FilePrefix}`);

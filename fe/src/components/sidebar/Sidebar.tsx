@@ -16,7 +16,7 @@ export const Sidebar: React.FC = () => {
     currentChatId,
     loadChatResponses
   } = useChatStore();
-  const { loading, handleAbort } = useAgent();
+  const { loading, handleAbort, setXChatMessages} = useAgent();
   
   // Fetch conversations when component mounts
   React.useEffect(() => {
@@ -50,6 +50,7 @@ export const Sidebar: React.FC = () => {
 
           handleAbort();
           setSelectedAgent(null);
+          setXChatMessages([]);
           createNewConversation();
         }}
         type="link"
@@ -86,10 +87,11 @@ export const Sidebar: React.FC = () => {
               onClick: async () => {
                 try {
                   // Call the deleteConversation function with the conversation key
-                  console.log(conversation.key);
+                  // console.log(conversation.key);
                   const result = await deleteConversation(conversation.key);
                   
                   if (result.success) {
+                    setXChatMessages([]);
                     message.success(result.message);
                   } else {
                     message.error(result.message);
