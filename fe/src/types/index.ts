@@ -143,6 +143,37 @@ export interface MessageContent {
     content: Array<Record<string, unknown>>;
     toolUseId: string;
   };
+  image?: {
+    format: string;
+    source: {
+      bytes?: {
+        __bytes_encoded__?: boolean;
+        data: string;
+      };
+      s3key?: string;
+    };
+  };
+  video?: {
+    format: string;
+    source: {
+      bytes?: {
+        __bytes_encoded__?: boolean;
+        data: string;
+      };
+      s3key?: string;
+    };
+  };
+  document?: {
+    format: string;
+    name?: string;
+    source: {
+      bytes?: {
+        __bytes_encoded__?: boolean;
+        data: string;
+      };
+      s3key?: string;
+    };
+  };
 }
 
 export interface Message {

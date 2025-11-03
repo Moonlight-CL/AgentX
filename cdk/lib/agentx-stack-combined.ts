@@ -64,6 +64,18 @@ export interface AgentXStackProps extends cdk.StackProps {
    * If not provided, defaults to true.
    */
   createDynamoDBTables?: boolean;
+
+  /**
+   * S3 bucket name for file storage.
+   * If not provided, defaults to 'agentx-files-bucket'.
+   */
+  s3BucketName?: string;
+
+  /**
+   * S3 file prefix for file storage.
+   * If not provided, defaults to 'agentx/files'.
+   */
+  s3FilePrefix?: string;
 }
 
 export class AgentXStack extends cdk.Stack {
@@ -96,6 +108,10 @@ export class AgentXStack extends cdk.Stack {
         name: 'agentx.ns',
       },
     });
+
+    // Get S3 configuration parameters with defaults
+    const s3BucketName = props?.s3BucketName || 'agentx-files-bucket';
+    const s3FilePrefix = props?.s3FilePrefix || 'agentx/files';
 
     // Reference existing ECR repositories
     const beRepository = ecr.Repository.fromRepositoryName(this, 'BeRepository', 'agentx/be');
@@ -292,6 +308,8 @@ export class AgentXStack extends cdk.Stack {
         APP_ENV: 'production',
         AWS_REGION: this.region,
         BYPASS_TOOL_CONSENT: 'true',
+        S3_BUCKET_NAME: s3BucketName,
+        S3_FILE_PREFIX: s3FilePrefix,
       },
       portMappings: [
         {
@@ -448,10 +466,11 @@ export class AgentXStack extends cdk.Stack {
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
       
-      // Create DynamoDB tables used by agent.py
+      // Create DynamoDB tables used by agent.py with new user isolation schema
       const agentTable = new cdk.aws_dynamodb.Table(this, 'AgentTable', {
         tableName: 'AgentTable',
-        partitionKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
         billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
@@ -472,10 +491,11 @@ export class AgentXStack extends cdk.Stack {
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
       
-      // Create DynamoDB table used by mcp.py
+      // Create DynamoDB table used by mcp.py with new user isolation schema
       const httpMcpTable = new cdk.aws_dynamodb.Table(this, 'HttpMCPTable', {
         tableName: 'HttpMCPTable',
-        partitionKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
         billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });

@@ -1,0 +1,50 @@
+/* File download link styles */
+.file-download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #1890ff;
+  cursor: pointer;
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.file-download-link:hover {
+  background-color: #f0f8ff;
+  color: #0056b3;
+  text-decoration: underline;
+}
+
+.file-download-link:active {
+  background-color: #e6f4ff;
+  transform: translateY(1px);
+}
+
+/* File type specific styles */
+.file-download-link[onclick*="'image'"] {
+  border-left: 3px solid #52c41a;
+}
+
+.file-download-link[onclick*="'video'"] {
+  border-left: 3px solid #722ed1;
+}
+
+.file-download-link[onclick*="'document'"] {
+  border-left: 3px solid #fa8c16;
+}
+
+/* Loading state for downloads */
+.file-download-link.downloading {
+  opacity: 0.6;
+  cursor: wait;
+  pointer-events: none;
+}
+
+.file-download-link.downloading::after {
+  content: " (下载中...)";
+  font-size: 0.8em;
+  color: #666;
+}

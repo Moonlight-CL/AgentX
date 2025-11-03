@@ -27,6 +27,15 @@ const AGENT_API = {
   streamChat: `${BASE_URL}/agent/stream_chat`,
 };
 
+// File API endpoints
+const FILE_API = {
+  upload: `${BASE_URL}/files/upload`,
+  download: (s3Key: string) => `${BASE_URL}/files/download/${encodeURIComponent(s3Key)}`,
+  downloadPost: `${BASE_URL}/files/download`,
+  info: (fileId: string) => `${BASE_URL}/files/info/${fileId}`,
+  delete: (fileId: string) => `${BASE_URL}/files/${fileId}`,
+};
+
 // Chat API endpoints
 const CHAT_API = {
   listRecords: `${BASE_URL}/chat/list_record`,
@@ -1123,10 +1132,10 @@ export const agentAPI = {
   },
   
   // Stream chat with an agent
-  streamChat: (agentId: string, userMessage: string, chatRecordEnabled: boolean = true): Promise<Response> => {
+  streamChat: (agentId: string, userMessage: string, chatRecordEnabled: boolean = true, chatRecordId?: string, fileAttachments?: any[]): Promise<Response> => {
     // Get token for SSE request
     const token = localStorage.getItem('user-storage');
-    console.log('Retrieved token from localStorage:', token);
+    // console.log('Retrieved token from localStorage:', token);
     let authToken = '';
     if (token) {
       try {
@@ -1139,6 +1148,23 @@ export const agentAPI = {
       }
     }
     
+    // Prepare request body
+    const requestBody: any = {
+      agent_id: agentId,
+      user_message: userMessage,
+      chat_record_enabled: chatRecordEnabled
+    };
+    
+    // Add chat_record_id if provided for continuing conversation
+    if (chatRecordId) {
+      requestBody.chat_record_id = chatRecordId;
+    }
+    
+    // Add file attachments if provided
+    if (fileAttachments && fileAttachments.length > 0) {
+      requestBody.file_attachments = fileAttachments;
+    }
+    
     // Use fetch API to make a POST request with proper headers for SSE
     return fetch(AGENT_API.streamChat, {
       method: 'POST',
@@ -1147,13 +1173,73 @@ export const agentAPI = {
         'Accept': 'text/event-stream',
         'Authorization': authToken ? `Bearer ${authToken}` : '',
       },
-      body: JSON.stringify({
-        agent_id: agentId,
-        user_message: userMessage,
-        chat_record_enabled: chatRecordEnabled
-      })
+      body: JSON.stringify(requestBody)
     });
   }
+};
+
+export const fileAPI = {
+  // Upload files
+  uploadFiles: async (files: File[]): Promise<{ files: any[] }> => {
+    try {
+      const formData = new FormData();
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+      
+      const response = await apiAxios.post(FILE_API.upload, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error uploading files:', error);
+      throw new Error('Failed to upload files');
+    }
+  },
+  
+  // Download a file using POST request to avoid URL encoding issues
+  downloadFile: async (s3Key: string): Promise<Blob> => {
+    try {
+      const response = await apiAxios.post(FILE_API.downloadPost, {
+        s3_key: s3Key
+      }, {
+        responseType: 'blob',
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error downloading file ${s3Key}:`, error);
+      throw new Error('Failed to download file');
+    }
+  },
+  
+  // Delete a file
+  deleteFile: async (fileId: string): Promise<boolean> => {
+    try {
+      await apiAxios.delete(FILE_API.delete(fileId));
+      return true;
+    } catch (error) {
+      console.error(`Error deleting file ${fileId}:`, error);
+      throw new Error('Failed to delete file');
+    }
+  },
+  
+  // Get file info
+  getFileInfo: async (fileId: string): Promise<any> => {
+    try {
+      const response = await apiAxios.get(FILE_API.info(fileId));
+      return response.data;
+    } catch (error) {
+      console.error(`Error getting file info ${fileId}:`, error);
+      throw new Error('Failed to get file info');
+    }
+  },
+  
+  // Generate download URL for S3 key
+  getDownloadUrl: (s3Key: string): string => {
+    return FILE_API.download(s3Key);
+  },
 };
 
 export const orchestrationAPI = {

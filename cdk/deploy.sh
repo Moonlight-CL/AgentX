@@ -17,6 +17,8 @@ usage() {
   echo "  --aws-db-mcp-cpu CPU        CPU units for AWS DB MCP server (256, 512, 1024, 2048, 4096, default: 1024)"
   echo "  --aws-db-mcp-memory MEMORY  Memory in MiB for AWS DB MCP server (default: 2048)"
   echo "  --no-dynamodb-tables        Disable creation of DynamoDB tables for agent and MCP services"
+  echo "  --s3-bucket-name BUCKET     S3 bucket name for file storage (default: agentx-files-bucket)"
+  echo "  --s3-file-prefix PREFIX     S3 file prefix for file storage (default: agentx/files)"
   echo "  --help                      Display this help message"
   exit 1
 }
@@ -32,6 +34,8 @@ DEPLOY_AWS_DB_MCP=true
 AWS_DB_MCP_CPU=1024
 AWS_DB_MCP_MEMORY=2048
 CREATE_DYNAMODB_TABLES=true
+S3_BUCKET_NAME="agentx-files-bucket"
+S3_FILE_PREFIX="agentx/files"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -76,6 +80,14 @@ while [[ $# -gt 0 ]]; do
       CREATE_DYNAMODB_TABLES=false
       shift
       ;;
+    --s3-bucket-name)
+      S3_BUCKET_NAME="$2"
+      shift 2
+      ;;
+    --s3-file-prefix)
+      S3_FILE_PREFIX="$2"
+      shift 2
+      ;;
     --help)
       usage
       ;;
@@ -102,6 +114,8 @@ echo "DuckDB MCP server deployment: $([ "$DEPLOY_DUCKDB_MCP" = true ] && echo "E
 echo "OpenSearch MCP server deployment: $([ "$DEPLOY_OPENSEARCH_MCP" = true ] && echo "Enabled" || echo "Disabled")"
 echo "AWS DB MCP server deployment: $([ "$DEPLOY_AWS_DB_MCP" = true ] && echo "Enabled (CPU: ${AWS_DB_MCP_CPU}, Memory: ${AWS_DB_MCP_MEMORY}MiB)" || echo "Disabled")"
 echo "DynamoDB tables creation: $([ "$CREATE_DYNAMODB_TABLES" = true ] && echo "Enabled" || echo "Disabled")"
+echo "S3 bucket name: ${S3_BUCKET_NAME}"
+echo "S3 file prefix: ${S3_FILE_PREFIX}"
 echo "Agent Schedule functionality: Enabled"
 
 # Bootstrap CDK if not already done
@@ -159,10 +173,18 @@ fi
 CDK_PARAMS="$CDK_PARAMS -c awsDbMcpCpu=$AWS_DB_MCP_CPU"
 CDK_PARAMS="$CDK_PARAMS -c awsDbMcpMemory=$AWS_DB_MCP_MEMORY"
 
+# Add S3 configuration parameters
+CDK_PARAMS="$CDK_PARAMS -c s3BucketName=$S3_BUCKET_NAME"
+CDK_PARAMS="$CDK_PARAMS -c s3FilePrefix=$S3_FILE_PREFIX"
+
 if [ "$CREATE_DYNAMODB_TABLES" = false ]; then
   CDK_PARAMS="$CDK_PARAMS -c createDynamoDBTables=false"
   export CREATE_DYNAMODB_TABLES=false
 fi
+
+# Export S3 configuration for CDK
+export S3_BUCKET_NAME=$S3_BUCKET_NAME
+export S3_FILE_PREFIX=$S3_FILE_PREFIX
 
 
 # Set AWS region

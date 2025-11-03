@@ -48,6 +48,7 @@ class DynamoDBTables:
     AGENTS = "AgentTable"
     CHAT_RECORDS = "ChatRecordTable"
     CHAT_RESPONSES = "ChatResponseTable"
+    CHAT_SESSIONS = "ChatSessionTable"
     
     # User related tables
     USERS = "UserTable"
@@ -100,3 +101,7 @@ def get_orchestration_execution_table():
 def get_config_table():
     """Get the configurations DynamoDB table."""
     return get_dynamodb_table(DynamoDBTables.CONFIGURATIONS)
+
+def get_chat_session_table():
+    """Get the chat sessions DynamoDB table."""
+    return get_dynamodb_table(DynamoDBTables.CHAT_SESSIONS)

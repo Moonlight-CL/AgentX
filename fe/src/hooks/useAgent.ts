@@ -15,7 +15,7 @@ export const useAgent = () => {
 
   // Custom request function for the agent
   const customRequest = async (
-    info: { message: {content: string} },
+    info: { message: {content: string, fileattachments?: any[]}},
     callbacks: {
       onUpdate: (chunk: string) => void;
       onSuccess: (chunks: string[]) => void;
@@ -41,21 +41,20 @@ export const useAgent = () => {
         callbacks.onStream(controller);
       }
       
-      // Call the stream_chat API with the correct parameters using agentAPI
-      console.log('Sending request with agent ID:', currentSelectedAgent.id);
-      console.log('User message:', info.message);
-      
       // Get the chatRecordEnabled value from the store
       const chatRecordEnabled = useChatStore.getState().chatRecordEnabled;
+      
+      // Get current chat ID from store for session continuation
+      const currentChatId = useChatStore.getState().currentChatId;
       
       // Use the unified agentAPI.streamChat method which includes authentication
       const response = await agentAPI.streamChat(
         currentSelectedAgent.id,
         info.message.content,
-        chatRecordEnabled
+        chatRecordEnabled,
+        currentChatId || undefined,  // Pass current chat ID for session continuation
+        info.message.fileattachments  // Pass file attachments
       );
-      
-      console.log('Response status:', response.status);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -77,6 +76,11 @@ export const useAgent = () => {
       const processSSEMessage = (data: string) => {
         try {
           const eventData = JSON.parse(data);
+          
+          // Check if this is a chat_id event (sent by backend for new conversations)
+          if (eventData.chat_id && !useChatStore.getState().currentChatId) {
+            useChatStore.getState().setCurrentChatId(eventData.chat_id);
+          }
           
           if (getEventType(eventData) === "message") {
             accumulatedEvents = [...accumulatedEvents, eventData];
@@ -179,9 +183,9 @@ export const useAgent = () => {
   });
   
   const loading = agent.isRequesting() || isProcessing;
-
+  
   // Use the XChat hook with our agent
-  const { onRequest, messages: agentMessages } = useXChat({
+  const { onRequest, messages: agentMessages, setMessages: setXChatMessages} = useXChat({
     agent,
     requestFallback: (_, { error }) => {
       if (error.name === 'AbortError') {
@@ -206,7 +210,6 @@ export const useAgent = () => {
           role: 'assistant',
         };
       }
-      
       // Otherwise, return the original message or an empty one
       return {
         content: originMessage?.content || '',
@@ -220,7 +223,7 @@ export const useAgent = () => {
 
   // Get setMessages from store using selector pattern
   const setMessages = useChatStore(state => state.setMessages);
-  
+
   // Sync agent messages with store
   useEffect(() => {
     if (agentMessages && agentMessages.length > 0) {
@@ -230,14 +233,15 @@ export const useAgent = () => {
         status: item.status === 'loading' ? 'loading' as const : 
                 item.status === 'error' ? 'error' as const : 'done' as const
       }));
+
       setMessages(convertedMessages);
     }
   }, [agentMessages, setMessages]);
 
 
   // Use useEffect to create a memoized handleSubmit function that updates when selectedAgent changes
-  const handleSubmit = (val: string) => {
-    if (!val) return;
+  const handleSubmit = (val: string, fileattachments?: any[]) => {
+    if (!val && (!fileattachments || fileattachments.length === 0)) return;
 
     if (loading) {
       console.error('Request is in progress, please wait for the request to complete.');
@@ -252,11 +256,11 @@ export const useAgent = () => {
       return;
     }
 
-    console.log('Submitting with agent:', currentSelectedAgent.display_name);
-    
+    // Store fileAttachments separately to avoid passing it to UI components
+    // The customRequest function will access it from the message object
     onRequest({
       stream: true,
-      message: {role: 'user', content: val}
+      message: {role: 'user', content: val, fileattachments: fileattachments, userinput: "true"}
     });
   };
 
@@ -270,5 +274,6 @@ export const useAgent = () => {
     handleSubmit,
     handleAbort,
     agentEvents,
+    setXChatMessages
   };
 };

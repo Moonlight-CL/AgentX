@@ -10,7 +10,7 @@ import { ChatInput } from './ChatInput';
 
 export const ChatDetail: React.FC = () => {
   const { styles } = useStyles();
-  const { loading, handleSubmit, handleAbort } = useAgent();
+  const { loading, handleSubmit, handleAbort, setXChatMessages} = useAgent();
   const navigate = useNavigate();
   
   // Fetch conversations and agents when component mounts
@@ -59,7 +59,7 @@ export const ChatDetail: React.FC = () => {
       {/* Chat content */}
       <div style={{ height: 'calc(100vh - 73px)', overflow: 'auto' }}>
         <ChatList onSubmit={handleSubmit} />
-        <ChatInput onSubmit={handleSubmit} onCancel={handleAbort} loading={loading} />
+        <ChatInput onSubmit={handleSubmit} onCancel={handleAbort} loading={loading} setXChatMessages={setXChatMessages}/>
       </div>
     </div>
   );

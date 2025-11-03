@@ -156,12 +156,30 @@ chmod +x cdk/deploy.sh
 # Navigate to the CDK directory
 cd cdk
 
-# Run the deployment script with options
+# Basic deployment
 ./deploy.sh --region us-west-2
+
+# Deployment with custom S3 configuration
+./deploy.sh --region us-west-2 --s3-bucket-name my-agentx-files --s3-file-prefix uploads/agentx
+
+# Deployment with selective MCP servers and custom S3
+./deploy.sh --region us-west-2 \
+  --no-mysql-mcp \
+  --no-redshift-mcp \
+  --s3-bucket-name production-files \
+  --s3-file-prefix agentx/prod/files
+
+# Deployment with existing VPC and custom configuration
+./deploy.sh --region us-west-2 \
+  --vpc-id vpc-12345678 \
+  --aws-db-mcp-cpu 2048 \
+  --aws-db-mcp-memory 4096 \
+  --s3-bucket-name enterprise-storage \
+  --s3-file-prefix agentx/enterprise
 ```
 
 Available options:
-- `--region REGION`: AWS region to deploy to
+- `--region REGION`: AWS region to deploy to (default: from AWS config or us-west-2)
 - `--vpc-id VPC_ID`: Use existing VPC ID instead of creating a new one
 - `--no-mysql-mcp`: Disable MySQL MCP server deployment
 - `--no-redshift-mcp`: Disable Redshift MCP server deployment
@@ -170,7 +188,10 @@ Available options:
 - `--no-aws-db-mcp`: Disable AWS DB MCP server deployment
 - `--aws-db-mcp-cpu CPU`: CPU units for AWS DB MCP server (256, 512, 1024, 2048, 4096, default: 1024)
 - `--aws-db-mcp-memory MEMORY`: Memory in MiB for AWS DB MCP server (default: 2048)
-- `--no-dynamodb-tables`: Disable creation of DynamoDB tables
+- `--no-dynamodb-tables`: Disable creation of DynamoDB tables for agent and MCP services
+- `--s3-bucket-name BUCKET`: S3 bucket name for file storage (default: agentx-files-bucket)
+- `--s3-file-prefix PREFIX`: S3 file prefix for file storage (default: agentx/files)
+- `--help`: Display help message with all available options
 
 ##### Option B: Manual CDK Deployment
 
@@ -201,8 +222,9 @@ The CDK deployment creates the following DynamoDB tables with user authenticatio
 - **Purpose**: Stores user authentication information including hashed passwords, salts, and user metadata
 
 #### AgentTable (Agent configurations and metadata)
-- **Partition Key**: `id` (String)
-- **Purpose**: Stores agent configurations and metadata
+- **Partition Key**: `user_id` (String)
+- **Sort Key**: `id` (String)
+- **Purpose**: Stores agent configurations and metadata with user isolation support
 
 #### ChatRecordTable (Chat session records)
 - **Partition Key**: `user_id` (String)
@@ -217,8 +239,9 @@ The CDK deployment creates the following DynamoDB tables with user authenticatio
 **MCP and Advanced Features:**
 
 #### HttpMCPTable (MCP server configurations)
-- **Partition Key**: `id` (String)
-- **Purpose**: Stores MCP server configurations
+- **Partition Key**: `user_id` (String)
+- **Sort Key**: `id` (String)
+- **Purpose**: Stores MCP server configurations with user isolation support
 
 #### AgentScheduleTable (Scheduled agent tasks)
 - **Partition Key**: `id` (String)

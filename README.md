@@ -93,7 +93,8 @@ Model Context Protocol servers that extend agent capabilities:
      - Partition key: `user_id` (String)
    
    - **AgentTable** (Agent configurations and metadata)
-     - Partition key: `id` (String)
+     - Partition key: `user_id` (String)
+     - Sort key: `id` (String)
    
    - **ChatRecordTable** (Chat session records)
      - Partition key: `user_id` (String)
@@ -106,7 +107,8 @@ Model Context Protocol servers that extend agent capabilities:
    **MCP and Advanced Features:**
    
    - **HttpMCPTable** (MCP server configurations)
-     - Partition key: `id` (String)
+     - Partition key: `user_id` (String)
+     - Sort key: `id` (String)
    
    - **AgentScheduleTable** (Scheduled agent tasks)
      - Partition key: `id` (String)
