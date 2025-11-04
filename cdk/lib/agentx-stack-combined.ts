@@ -508,9 +508,27 @@ export class AgentXStack extends cdk.Stack {
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
       
+      // Create DynamoDB table for chat sessions
+      const chatSessionTable = new cdk.aws_dynamodb.Table(this, 'ChatSessionTable', {
+        tableName: 'ChatSessionTable',
+        partitionKey: { name: 'PK', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'SK', type: cdk.aws_dynamodb.AttributeType.STRING },
+        billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+      
       // Create DynamoDB table for orchestration workflows
       const orchestrationTable = new cdk.aws_dynamodb.Table(this, 'OrcheTable', {
         tableName: 'OrcheTable',
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+      
+      // Create DynamoDB table for orchestration executions
+      const orchestrationExecutionTable = new cdk.aws_dynamodb.Table(this, 'OrcheExecTable', {
+        tableName: 'OrcheExecTable',
         partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
         sortKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
         billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -954,7 +972,7 @@ export class AgentXStack extends cdk.Stack {
 
     // Create IAM role for EventBridge Scheduler
     const schedulerRole = new iam.Role(this, 'EventBridgeSchedulerRole', {
-      roleName: 'EventBridgeSchedulerExecutionRole',
+      // roleName: 'EventBridgeSchedulerExecutionRole',
       assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
     });
 
