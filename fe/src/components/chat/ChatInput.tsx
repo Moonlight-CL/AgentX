@@ -171,9 +171,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSubmit, onCancel, loadin
                         <Space>
                           <Attachments
                             beforeUpload={(file) => {
-                              const isLt2M = file.size / 1024 / 1024 < 10;
-                              if (!isLt2M) {
-                                message.error('文件必须小于2MB!');
+                              const isLt10M = file.size / 1024 / 1024 < 10;
+                              if (!isLt10M) {
+                                message.error('文件必须小于10MB!');
                                 return false;
                               }
                               // Add file to list without uploading immediately
