@@ -81,3 +81,9 @@ samconfig.toml
 # Frontend build
 fe/dist/
 fe/build/
+
+# Cline
+memory-bank/
+.clinerules/
+
+cdk.context.json
