@@ -1198,7 +1198,12 @@ export const fileAPI = {
       return response.data;
     } catch (error) {
       console.error('Error uploading files:', error);
-      throw new Error('Failed to upload files');
+      if (axios.isAxiosError(error) && error.response?.data?.detail) {
+        console.log(`----------------${error.response.data.detail}`);
+        throw new Error(error.response.data.detail);
+      } else {
+        throw new Error('Failed to upload files');
+      }
     }
   },
   
