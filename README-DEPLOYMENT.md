@@ -9,7 +9,7 @@ The AgentX deployment architecture consists of:
 - **AWS ECS Cluster**: Container orchestration service
 - **AWS ECR Repositories**: Docker image storage
 - **Application Load Balancer**: Traffic distribution
-- **DynamoDB Tables**: Data storage
+- **DynamoDB Tables**: Data storage with user authentication and data isolation
 - **EventBridge Scheduler**: Task scheduling
 - **Lambda Functions**: Serverless execution
 
@@ -156,18 +156,42 @@ chmod +x cdk/deploy.sh
 # Navigate to the CDK directory
 cd cdk
 
-# Run the deployment script with options
+# Basic deployment
 ./deploy.sh --region us-west-2
+
+# Deployment with custom S3 configuration
+./deploy.sh --region us-west-2 --s3-bucket-name my-agentx-files --s3-file-prefix uploads/agentx
+
+# Deployment with selective MCP servers and custom S3
+./deploy.sh --region us-west-2 \
+  --no-mysql-mcp \
+  --no-redshift-mcp \
+  --s3-bucket-name production-files \
+  --s3-file-prefix agentx/prod/files
+
+# Deployment with existing VPC and custom configuration
+./deploy.sh --region us-west-2 \
+  --vpc-id vpc-12345678 \
+  --aws-db-mcp-cpu 2048 \
+  --aws-db-mcp-memory 4096 \
+  --s3-bucket-name enterprise-storage \
+  --s3-file-prefix agentx/enterprise
 ```
 
 Available options:
-- `--region REGION`: AWS region to deploy to
+- `--region REGION`: AWS region to deploy to (default: from AWS config or us-west-2)
 - `--vpc-id VPC_ID`: Use existing VPC ID instead of creating a new one
 - `--no-mysql-mcp`: Disable MySQL MCP server deployment
 - `--no-redshift-mcp`: Disable Redshift MCP server deployment
 - `--no-duckdb-mcp`: Disable DuckDB MCP server deployment
 - `--no-opensearch-mcp`: Disable OpenSearch MCP server deployment
-- `--no-dynamodb-tables`: Disable creation of DynamoDB tables
+- `--no-aws-db-mcp`: Disable AWS DB MCP server deployment
+- `--aws-db-mcp-cpu CPU`: CPU units for AWS DB MCP server (256, 512, 1024, 2048, 4096, default: 1024)
+- `--aws-db-mcp-memory MEMORY`: Memory in MiB for AWS DB MCP server (default: 2048)
+- `--no-dynamodb-tables`: Disable creation of DynamoDB tables for agent and MCP services
+- `--s3-bucket-name BUCKET`: S3 bucket name for file storage (default: agentx-files-bucket)
+- `--s3-file-prefix PREFIX`: S3 file prefix for file storage (default: agentx/files)
+- `--help`: Display help message with all available options
 
 ##### Option B: Manual CDK Deployment
 
@@ -187,13 +211,79 @@ cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
 cdk --app "npx ts-node --prefer-ts-exts bin/cdk-combined.ts" deploy AgentXStack
 ```
 
-### 3. Deployment Verification
+### 3. DynamoDB Tables Structure
+
+The CDK deployment creates the following DynamoDB tables with user authentication and data isolation support:
+
+**Core Tables:**
+
+#### UserTable (User authentication and management)
+- **Partition Key**: `user_id` (String)
+- **Purpose**: Stores user authentication information including hashed passwords, salts, and user metadata
+
+#### AgentTable (Agent configurations and metadata)
+- **Partition Key**: `user_id` (String)
+- **Sort Key**: `id` (String)
+- **Purpose**: Stores agent configurations and metadata with user isolation support
+
+#### ChatRecordTable (Chat session records)
+- **Partition Key**: `user_id` (String)
+- **Sort Key**: `id` (String)
+- **Purpose**: Stores chat conversation records with user isolation support
+
+#### ChatResponseTable (Individual chat messages and responses)
+- **Partition Key**: `id` (String)
+- **Sort Key**: `resp_no` (Number)
+- **Purpose**: Stores agent responses for each chat conversation
+
+#### ChatSessionTable (Chat session management and memory storage)
+- **Partition Key**: `PK` (String)
+- **Sort Key**: `SK` (String)
+- **Purpose**: Stores chat session data and memory information for agent conversations, enabling persistent context across chat interactions
+
+**MCP and Advanced Features:**
+
+#### HttpMCPTable (MCP server configurations)
+- **Partition Key**: `user_id` (String)
+- **Sort Key**: `id` (String)
+- **Purpose**: Stores MCP server configurations with user isolation support
+
+#### AgentScheduleTable (Scheduled agent tasks)
+- **Partition Key**: `id` (String)
+- **Purpose**: Stores scheduled agent task configurations
+
+**Additional Tables** (used by orchestration and configuration features):
+
+#### OrcheTable (Orchestration workflows)
+- **Partition Key**: `user_id` (String)
+- **Sort Key**: `id` (String)
+- **Purpose**: Stores orchestration workflow definitions with user isolation
+
+#### ConfTable (System configurations)
+- **Partition Key**: `key` (String)
+- **Purpose**: Stores system-wide configuration settings
+
+> **Note**: All tables use pay-per-request billing mode and are configured with appropriate retention policies for production use.
+
+### 4. User Authentication Features
+
+The deployed application includes:
+
+- **User Registration**: New users can create accounts with username/email and password
+- **User Login**: JWT token-based authentication system
+- **Data Isolation**: Each user's data (chat records, agents) is completely isolated
+- **Session Management**: Secure token-based session handling
+- **Password Security**: PBKDF2 hashing with individual salts for each user
+
+### 5. Deployment Verification
 
 After deployment is complete, you can verify the deployment by:
 
 1. Checking the AWS CloudFormation console for stack status
 2. Accessing the application using the ALB DNS name provided in the CloudFormation outputs
 3. Monitoring the ECS services in the AWS ECS console
+4. Testing user registration and login functionality
+5. Verifying data isolation by creating multiple user accounts
 
 ## ⚙️ Configuration
 

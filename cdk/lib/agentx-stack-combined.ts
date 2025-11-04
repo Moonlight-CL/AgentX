@@ -48,10 +48,34 @@ export interface AgentXStackProps extends cdk.StackProps {
   deployAwsDbMcpServer?: boolean;
 
   /**
+   * CPU units for the AWS DB MCP server (256, 512, 1024, 2048, 4096).
+   * If not provided, defaults to 1024 (1 vCPU).
+   */
+  awsDbMcpCpu?: number;
+
+  /**
+   * Memory in MiB for the AWS DB MCP server.
+   * If not provided, defaults to 2048 (2GB).
+   */
+  awsDbMcpMemory?: number;
+
+  /**
    * Whether to create DynamoDB tables used by agent and MCP services.
    * If not provided, defaults to true.
    */
   createDynamoDBTables?: boolean;
+
+  /**
+   * S3 bucket name for file storage.
+   * If not provided, defaults to 'agentx-files-bucket'.
+   */
+  s3BucketName?: string;
+
+  /**
+   * S3 file prefix for file storage.
+   * If not provided, defaults to 'agentx/files'.
+   */
+  s3FilePrefix?: string;
 }
 
 export class AgentXStack extends cdk.Stack {
@@ -84,6 +108,10 @@ export class AgentXStack extends cdk.Stack {
         name: 'agentx.ns',
       },
     });
+
+    // Get S3 configuration parameters with defaults
+    const s3BucketName = props?.s3BucketName || 'agentx-files-bucket';
+    const s3FilePrefix = props?.s3FilePrefix || 'agentx/files';
 
     // Reference existing ECR repositories
     const beRepository = ecr.Repository.fromRepositoryName(this, 'BeRepository', 'agentx/be');
@@ -256,9 +284,14 @@ export class AgentXStack extends cdk.Stack {
       taskRole: mcpOpenSearchTaskRole,
     });
 
+    // Get container size parameters for AWS DB MCP server with defaults
+    // First check context values, then props, then defaults
+    const awsDbMcpCpu = this.node.tryGetContext('awsDbMcpCpu') || props?.awsDbMcpCpu || 1024; // Default to 1 vCPU (1024 units)
+    const awsDbMcpMemory = this.node.tryGetContext('awsDbMcpMemory') || props?.awsDbMcpMemory || 2048; // Default to 2GB (2048 MiB)
+
     const mcpAwsDbTaskDefinition = new ecs.FargateTaskDefinition(this, 'McpAwsDbTaskDefinition', {
-      memoryLimitMiB: 512,
-      cpu: 256,
+      memoryLimitMiB: awsDbMcpMemory,
+      cpu: awsDbMcpCpu,
       executionRole,
       taskRole: mcpAwsDbTaskRole,
     });
@@ -274,6 +307,9 @@ export class AgentXStack extends cdk.Stack {
         // Add environment variables as needed
         APP_ENV: 'production',
         AWS_REGION: this.region,
+        BYPASS_TOOL_CONSENT: 'true',
+        S3_BUCKET_NAME: s3BucketName,
+        S3_FILE_PREFIX: s3FilePrefix,
       },
       portMappings: [
         {
@@ -422,17 +458,27 @@ export class AgentXStack extends cdk.Stack {
     
     // Conditionally create DynamoDB tables for agent and MCP services
     if (createDynamoDBTables) {
-      // Create DynamoDB tables used by agent.py
+      // Create DynamoDB table for user management
+      const userTable = new cdk.aws_dynamodb.Table(this, 'UserTable', {
+        tableName: 'UserTable',
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+      
+      // Create DynamoDB tables used by agent.py with new user isolation schema
       const agentTable = new cdk.aws_dynamodb.Table(this, 'AgentTable', {
         tableName: 'AgentTable',
-        partitionKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
         billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
       
       const chatRecordTable = new cdk.aws_dynamodb.Table(this, 'ChatRecordTable', {
         tableName: 'ChatRecordTable',
-        partitionKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
         billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
@@ -445,10 +491,11 @@ export class AgentXStack extends cdk.Stack {
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
       
-      // Create DynamoDB table used by mcp.py
+      // Create DynamoDB table used by mcp.py with new user isolation schema
       const httpMcpTable = new cdk.aws_dynamodb.Table(this, 'HttpMCPTable', {
         tableName: 'HttpMCPTable',
-        partitionKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
         billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
@@ -461,7 +508,42 @@ export class AgentXStack extends cdk.Stack {
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
       
-      console.log('DynamoDB tables for agent and MCP services will be created');
+      // Create DynamoDB table for chat sessions
+      const chatSessionTable = new cdk.aws_dynamodb.Table(this, 'ChatSessionTable', {
+        tableName: 'ChatSessionTable',
+        partitionKey: { name: 'PK', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'SK', type: cdk.aws_dynamodb.AttributeType.STRING },
+        billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+      
+      // Create DynamoDB table for orchestration workflows
+      const orchestrationTable = new cdk.aws_dynamodb.Table(this, 'OrcheTable', {
+        tableName: 'OrcheTable',
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+      
+      // Create DynamoDB table for orchestration executions
+      const orchestrationExecutionTable = new cdk.aws_dynamodb.Table(this, 'OrcheExecTable', {
+        tableName: 'OrcheExecTable',
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+      
+      // Create DynamoDB table for system configurations
+      const configTable = new cdk.aws_dynamodb.Table(this, 'ConfTable', {
+        tableName: 'ConfTable',
+        partitionKey: { name: 'key', type: cdk.aws_dynamodb.AttributeType.STRING },
+        billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+      
+      console.log('DynamoDB tables for agent, user management, and MCP services will be created');
     } else {
       console.log('DynamoDB tables creation is disabled');
     }
@@ -890,7 +972,7 @@ export class AgentXStack extends cdk.Stack {
 
     // Create IAM role for EventBridge Scheduler
     const schedulerRole = new iam.Role(this, 'EventBridgeSchedulerRole', {
-      roleName: 'EventBridgeSchedulerExecutionRole',
+      // roleName: 'EventBridgeSchedulerExecutionRole',
       assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
     });
 

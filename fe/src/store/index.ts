@@ -6,6 +6,8 @@ import { formatMessageEvent, formatToHTML } from '../utils/agentEventFormatter';
 
 export { useAgentStore } from './agentStore';
 export { useMCPStore } from './mcpStore';
+export { useUserStore } from './userStore';
+export { useUseCaseStore } from './useCaseStore';
 
 interface ChatState {
   // Conversations
@@ -49,7 +51,7 @@ interface ChatState {
   fetchConversations: () => Promise<void>;
   loadChatResponses: (chatId: string) => Promise<void>;
   createNewConversation: () => void;
-  deleteConversation: (key: string) => Promise<void>;
+  deleteConversation: (key: string) => Promise<{ success: boolean; message: string }>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -171,32 +173,55 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const currentMessageEvents = events as MessageEvent[];
         let htmlContent = '';
 
+        // const historyMsgs = get().messages;
+
+        const messages = [];
+
         if (currentMessageEvents.length > 0) {
           for (const msgEvent of currentMessageEvents) {
+
+            let isUserInput = msgEvent.message.role === 'user' && msgEvent.message.content.find(part => part.toolResult === undefined);
             const formatted = formatMessageEvent(msgEvent);
-            htmlContent += formatToHTML(formatted);
+            if (isUserInput) {
+              if (htmlContent !== '') {
+                // Assistant response message
+                messages.push(
+                  {
+                    message: {
+                      role: 'assistant',
+                      content: htmlContent
+                    },
+                    status: 'done' as const
+                  }
+                );
+                htmlContent = '';
+              }
+              // User input message
+              messages.push({
+                message: {
+                  role: 'user',
+                  content: formatted
+                },
+                status: 'done' as const
+              });
+
+            } else {
+              htmlContent += formatToHTML(formatted);
+            }
           }
-          
+          if (htmlContent !== '') {
+            messages.push(
+              {
+                message: {
+                  role: 'assistant',
+                  content: htmlContent
+                },
+                status: 'done' as const
+              }
+            );
+          }
         }
-        
-        // Create messages from the responses
-        const messages = [
-          {
-            message: {
-              role: 'user',
-              content: chatRecord!.user_message
-            },
-            status: 'done' as const
-          },
-          {
-            message: {
-              role: 'assistant',
-              content: htmlContent
-            },
-            status: 'done' as const
-          }
-      ];
-        
+        // const allMsgs   = historyMsgs.concat(messages)
         set({ messages });
       }
     } catch (error) {
@@ -204,19 +229,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
   createNewConversation: () => {
-    // Reset messages and selectedAgent
+    // Reset messages, selectedAgent, and currentChatId for new conversation
     set({
       messages: [],
-      selectedAgent: null
+      agentEvents: [],
+      selectedAgent: null,
+      currentChatId: null
     });
   },
   
   deleteConversation: async (key) => {
     try {
       // Call the API to delete the chat
-      const success = await chatAPI.deleteChat(key);
+      const result = await chatAPI.deleteChat(key);
       
-      if (success) {
+      if (result.success) {
         // Remove the conversation from the list
         const { conversations, currentChatId } = get();
         const newConversations = conversations.filter((item) => item.key !== key);
@@ -224,15 +251,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
         
         // Reset messages if the deleted chat was the current one
         if (currentChatId === key) {
-          set({ 
+          set({
+            selectedAgent: null,
             messages: [],
             currentChatId: null,
             agentEvents: []
           });
         }
+        
+        return { success: true, message: result.message || '对话删除成功' };
+      } else {
+        return { success: false, message: result.message || '删除对话失败，请稍后重试' };
       }
     } catch (error) {
       console.error(`Error deleting conversation with key ${key}:`, error);
+      return { success: false, message: '删除对话时发生错误，请稍后重试' };
     }
   },
 }));

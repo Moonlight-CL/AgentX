@@ -1,5 +1,5 @@
 import React from 'react';
-import { Avatar, Button } from 'antd';
+import { Avatar, Button, message } from 'antd';
 import { Conversations } from '@ant-design/x';
 import { DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useStyles } from '../../styles';
@@ -16,7 +16,7 @@ export const Sidebar: React.FC = () => {
     currentChatId,
     loadChatResponses
   } = useChatStore();
-  const { loading, handleAbort } = useAgent();
+  const { loading, handleAbort, setXChatMessages} = useAgent();
   
   // Fetch conversations when component mounts
   React.useEffect(() => {
@@ -50,6 +50,7 @@ export const Sidebar: React.FC = () => {
 
           handleAbort();
           setSelectedAgent(null);
+          setXChatMessages([]);
           createNewConversation();
         }}
         type="link"
@@ -83,10 +84,22 @@ export const Sidebar: React.FC = () => {
               key: 'delete',
               icon: <DeleteOutlined />,
               danger: true,
-              onClick: () => {
-                // Call the deleteConversation function with the conversation key
-                console.log(conversation.key)
-                deleteConversation(conversation.key);
+              onClick: async () => {
+                try {
+                  // Call the deleteConversation function with the conversation key
+                  // console.log(conversation.key);
+                  const result = await deleteConversation(conversation.key);
+                  
+                  if (result.success) {
+                    setXChatMessages([]);
+                    message.success(result.message);
+                  } else {
+                    message.error(result.message);
+                  }
+                } catch (error) {
+                  console.error('Error deleting conversation:', error);
+                  message.error('删除对话时发生未知错误');
+                }
               },
             },
           ],

@@ -8,9 +8,11 @@ from strands.models import BedrockModel
 from strands.models.bedrock import BotocoreConfig
 from strands.tools.mcp.mcp_client import MCPClient
 from mcp.client.streamable_http import streamablehttp_client
+from strands.session.repository_session_manager import RepositorySessionManager
 from ..mcp.mcp import MCPService
 from .event_serializer import EventSerializer
-from ..utils.aws_config import get_aws_region
+from .dynamodb_session_repository import DynamoDBSessionRepository
+from ..utils.aws_config import get_aws_region, get_chat_session_table, get_chat_record_table, get_dynamodb_resource
 
 from enum import Enum
 from typing import Optional, List
@@ -176,14 +178,16 @@ class AgentPOService:
     dynamodb_table_name = "AgentTable"
 
     def __init__(self):
-        aws_region = get_aws_region()
-        self.dynamodb = boto3.resource('dynamodb', region_name=aws_region)
+        # aws_region = get_aws_region()
+        # self.dynamodb = boto3.resource('dynamodb', region_name=aws_region)
+        self.dynamodb = get_dynamodb_resource()
 
-    def add_agent(self, agent_po: AgentPO):
+    def add_agent(self, agent_po: AgentPO, user_id: str = 'public'):
         """
         Add an AgentPO object to Amazon DynamoDB
 
         :param agent_po: The AgentPO object to add.
+        :param user_id: The user ID for data isolation.
         :raises ValueError: If an agent with the same name already exists.
         :return: None
         """
@@ -193,6 +197,7 @@ class AgentPOService:
         # write to DynamoDB
         table = self.dynamodb.Table(self.dynamodb_table_name)
         item = {
+            'user_id': user_id,
             'id': agent_po.id,
             'name': agent_po.name,
             'display_name': agent_po.display_name,
@@ -211,71 +216,98 @@ class AgentPOService:
             
         table.put_item(Item=item)
 
-    def get_agent(self, id: str) -> Optional[AgentPO]:
+    def get_agent(self, user_id: str, id: str) -> Optional[AgentPO]:
         """
         Retrieve an AgentPO object by its ID from Amazon DynamoDB.
+        Checks both user-specific and public data.
 
+        :param user_id: The user ID for data isolation.
         :param id: The ID of the agent to retrieve.
         :return: An AgentPO object if found, otherwise None.
         """
         table = self.dynamodb.Table(self.dynamodb_table_name)
-        response = table.get_item(Key={'id': id})
-
-        if 'Item' in response:
-            item = response['Item']
-            return self._map_agent_item(item)
+        keys = [user_id, 'public']
+        
+        for k in keys:
+            response = table.get_item(Key={'user_id': k, 'id': id})
+            if 'Item' in response:
+                item = response['Item']
+                return self._map_agent_item(item)
         return None
 
-    def query_agent_by_name(self, name: str, limit: int = 5) -> Optional[List[AgentPO]]:
+    def query_agent_by_name(self, user_id: str, name: str, limit: int = 5) -> Optional[List[AgentPO]]:
         """
-        Retrieve an AgentPO object by its name from Amazon DynamoDB.
+        Retrieve AgentPO objects by name from Amazon DynamoDB.
+        Checks both user-specific and public data.
 
+        :param user_id: The user ID for data isolation.
         :param name: The name of the agent to retrieve.
-        :return: An AgentPO object if found, otherwise None.
+        :param limit: Maximum number of results to return.
+        :return: A list of AgentPO objects if found, otherwise None.
         """
         table = self.dynamodb.Table(self.dynamodb_table_name)
-        response = table.scan(FilterExpression=Attr('name').eq(name),
-                              Limit = limit)
+        keys = [user_id, 'public']
+        items = []
+        
+        for k in keys:
+            response = table.query(
+                KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(k),
+                FilterExpression=Attr('name').eq(name),
+                Limit=limit
+            )
+            items.extend(response.get('Items', []))
 
-        items = response.get('Items', [])
         if items:
-            return [self._map_agent_item(item) for item in items]
+            return [self._map_agent_item(item) for item in items[:limit]]
         return None
 
-    def list_agents(self) -> List[AgentPO]:
+    def list_agents(self, user_id: str) -> List[AgentPO]:
         """
-        List all AgentPO objects from Amazon DynamoDB.
+        List AgentPO objects for a specific user from Amazon DynamoDB.
+        Includes both user-specific and public agents.
+        
+        :param user_id: The user ID for data isolation.
         :return: A list of AgentPO objects.
         """
         table = self.dynamodb.Table(self.dynamodb_table_name)
-        response = table.scan()
-        items = response.get('Items', [])
+        keys = [user_id, 'public']
+        items = []
+        
+        for k in keys:
+            response = table.query(
+                KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(k),
+                Limit=100
+            )
+            items.extend(response.get('Items', []))
+
         if items:
-            return [ self._map_agent_item(item) for item in items]
+            return [self._map_agent_item(item) for item in items]
         return []
 
-    def delete_agent(self, id: str) -> bool:
+    def delete_agent(self, user_id: str, id: str) -> bool:
         """
         Delete an AgentPO object by its ID from Amazon DynamoDB.
 
+        :param user_id: The user ID for data isolation.
         :param id: The ID of the agent to delete.
         :return: True if deletion was successful, False otherwise.
         """
         table = self.dynamodb.Table(self.dynamodb_table_name)
-        response = table.delete_item(Key={'id': id})
+        response = table.delete_item(Key={'user_id': user_id, 'id': id})
 
         # Check if the item was deleted successfully
         return response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 200
     
-    async def stream_chat(self, agent_id: str, user_message: str):
+    async def stream_chat(self, user_id: str, agent_id: str, user_message: str):
         """
         Stream chat messages from an agent.
 
+        :param user_id: The user ID for data isolation.
         :param agent_id: The ID of the agent to stream chat from.
         :param user_message: The user's message to send to the agent.
         :return: A generator that yields complete event information.
         """
-        agent = self.get_agent(agent_id)
+        agent = self.get_agent(user_id, agent_id)
         if not agent:
             raise ValueError(f"Agent with ID {agent_id} not found.")
     
@@ -289,10 +321,11 @@ class AgentPOService:
             # Return the complete event information instead of just the data field
             yield message
 
-    def get_all_available_tools(self) -> List[AgentTool]:
+    def get_all_available_tools(self, user_id: str) -> List[AgentTool]:
         """
-        Get all available tools from the AgentPOService.
+        Get all available tools from the AgentPOService for a specific user.
 
+        :param user_id: The user ID for data isolation.
         :return: A list of AgentTool objects.
         """
         tools = []
@@ -300,16 +333,42 @@ class AgentPOService:
             tools.append(AgentTool(name=tool.identify, display_name=tool.name, category=tool.category, desc=tool.desc))
         
         # Add Agent tools(Only plain agents)
-        for agent in self.list_agents():
+        for agent in self.list_agents(user_id):
             if agent.agent_type == AgentType.plain:
                 tools.append(AgentTool(name=agent.name, display_name=agent.name, category="Agent", desc=agent.description, type=AgentToolType.agent, agent_id=agent.id))
 
         # Add MCP tools
         mcpService = MCPService()
-        for mcp in mcpService.list_mcp_servers():
+        for mcp in mcpService.list_mcp_servers(user_id):
             tools.append(AgentTool(name=mcp.name, display_name=mcp.name, category="Mcp", desc=mcp.desc, type=AgentToolType.mcp, mcp_server_url=mcp.host))
         
         return tools
+
+    def build_strands_agent_with_session(self, agent: AgentPO, session_id: str, **kwargs) -> Agent:
+        """
+        Build a Strands agent from an AgentPO object with session management.
+
+        :param agent: The AgentPO object to build the Strands agent from.
+        :param session_id: The session ID to use for session management.
+        :return: A Strands Agent instance with session management.
+        """
+        # Create DynamoDB session repository
+        session_repository = DynamoDBSessionRepository()
+        
+        # Create session manager
+        session_manager = RepositorySessionManager(
+            session_id=session_id,
+            session_repository=session_repository
+        )
+        
+        agent_id = f"{agent.id}_{session_id}"
+        # Build the agent with session manager
+        agent_instance = self.build_strands_agent(agent, agent_id = agent_id, session_manager=session_manager, **kwargs)
+        
+        # Set agent_id for session management
+        # agent_instance.agent_id = f"{agent.id}_{session_id}"
+        
+        return agent_instance
 
     def build_strands_agent(self, agent: AgentPO, **kwargs) -> Agent:
         """
@@ -318,6 +377,7 @@ class AgentPOService:
         :param agent: The AgentPO object to build the Strands agent from.
         :return: A Strands Agent instance.
         """
+        print(kwargs)
         # Parse and set environment variables if they exist
         if agent.envs:
             for line in agent.envs.strip().split('\n'):
@@ -356,8 +416,10 @@ class AgentPOService:
                     print(f"Error loading tool {t.name}: {e}")
             elif t.type == AgentToolType.agent and t.agent_id:
                 # If the tool is another agent, convert it to a Strands tool
-                agent_po = self.get_agent(t.agent_id)
-                tools.append(agent_as_tool(agent_po))
+                # Note: For agent tools, we use 'public' as user_id to access shared agents
+                agent_po = self.get_agent('public', t.agent_id)
+                if agent_po:
+                    tools.append(self.agent_as_tool(agent_po))
             elif t.type == AgentToolType.mcp and t.mcp_server_url:
                 # If the tool is an MCP server, create a Strands MCP client
                 streamable_http_mcp_client = MCPClient(lambda: streamablehttp_client(t.mcp_server_url))
@@ -377,6 +439,7 @@ class AgentPOService:
 
             model = BedrockModel(
                 model_id=agent.model_id,
+                region_name=get_aws_region(),
                 boto_client_config=boto_config,
             )
         elif agent.model_provider == ModelProvider.openai:
@@ -409,12 +472,29 @@ class AgentPOService:
                 model_id=agent.model_id,
                 boto_client_config=boto_config,
             )
+        
+        # check kwargs has additional tools
+        if kwargs and 'additional_tools' in kwargs:
+            tools.extend(kwargs['additional_tools'])
+            kwargs.pop('additional_tools')
 
         return Agent(
             system_prompt=agent.sys_prompt,
             model=model,
-            tools=tools
+            tools=tools,
+            **kwargs
         )
+    
+    def agent_as_tool(self, agent: AgentPO, **kwargs):
+        if agent.agent_type != AgentType.plain:
+            return
+
+        @tool(name=agent.name, description=agent.description)
+        def agent_tool(query: str) -> str:
+            agent_instance = self.build_strands_agent(agent, **kwargs)
+            resp = agent_instance(query)
+            return str(resp)
+        return agent_tool
 
     def _map_agent_item(self, item: dict) -> AgentPO:
         """
@@ -449,94 +529,22 @@ class AgentPOService:
             envs=item.get('envs', ''),
             extras=item.get('extras')
         )
-    
 
-def agent_as_tool(agent: AgentPO, **kwargs):
-
-    if agent.agent_type != AgentType.plain:
-        return
-
-    @tool(name=agent.name, description=agent.description)
-    def agent_tool(query: str) -> str:
-        # Parse and set environment variables if they exist
-        if agent.envs:
-            for line in agent.envs.strip().split('\n'):
-                if line and '=' in line:
-                    key, value = line.split('=', 1)
-                    key = key.strip()
-                    value = value.strip()
-                    if key and value:
-                        print(f"Setting environment variable: {key}")
-                        import os
-                        os.environ[key] = value
-                        
-        tools = []
-        for t in agent.tools:
-            if t.type == AgentToolType.strands:
-                try:    
-                    module = importlib.import_module(f"strands_tools.{t.name}")
-                    tools.append(module)
-                except (ImportError, AttributeError) as e:
-                    print(f"Error loading tool {t.name}: {e}")
-
-        # Choose the appropriate model based on the provider
-        if agent.model_provider == ModelProvider.bedrock:
-            boto_config = BotocoreConfig(
-                retries={"max_attempts": kwargs['max_attempts'] if 'max_attempts' in kwargs else 10, "mode": "standard"},
-                connect_timeout=kwargs['connect_timeout'] if 'connect_timeout' in kwargs else 10,
-                read_timeout=kwargs['read_timeout'] if 'read_timeout' in kwargs else 900
-            )
-
-            model = BedrockModel(
-                model_id=agent.model_id,
-                boto_client_config=boto_config,
-            )
-        elif agent.model_provider == ModelProvider.openai:
-            # For OpenAI, use the extras field to get base_url and api_key
-            from strands.models import OpenAIModel
-            
-            base_url = None
-            api_key = None
-            
-            if agent.extras:
-                base_url = agent.extras.get('base_url')
-                api_key = agent.extras.get('api_key')
-            
-            model = OpenAIModel(
-                model_id=agent.model_id,
-                api_key=api_key,
-                base_url=base_url
-            )
-        else:
-            # Default to Bedrock for now
-            boto_config = BotocoreConfig(
-                retries={"max_attempts": kwargs['max_attempts'] if 'max_attempts' in kwargs else 10, "mode": "standard"},
-                connect_timeout=kwargs['connect_timeout'] if 'connect_timeout' in kwargs else 10,
-                read_timeout=kwargs['read_timeout'] if 'read_timeout' in kwargs else 900
-            )
-
-            model = BedrockModel(
-                model_id=agent.model_id,
-                boto_client_config=boto_config,
-            )
-
-        agent_instance = Agent(
-            system_prompt=agent.sys_prompt,
-            model=model,
-            tools= tools
-        )
-
-        resp = agent_instance(query)
-        return str(resp)
-
-    return agent_tool
-
-# Agent Chat Records
+# Agent Chat Records (扩展支持编排记录)
 class ChatRecord(BaseModel):
     id: str
-    agent_id: str
+    agent_id: str  # 对于编排记录，这里存储"orchestration"
+    user_id: str
     user_message: str
-    create_time: str
+    create_time: str  # 对于编排记录，这是start_time
+    
+    # 编排相关字段
+    record_type: str = "agent"  # "agent" 或 "orchestration"
+    config: Optional[dict] = None  # 编排配置（当record_type为orchestration时）
+    status: Optional[str] = None  # 编排状态：pending, running, completed, failed
+    end_time: Optional[str] = None
+    results: Optional[dict] = None
+    error: Optional[str] = None
 
 # Agent Chat Responses
 class ChatResponse(BaseModel):
@@ -555,8 +563,30 @@ class ChatRecordService:
     chat_response_table_name = "ChatResponseTable"
 
     def __init__(self):
-        aws_region = get_aws_region()
-        self.dynamodb = boto3.resource('dynamodb', region_name=aws_region)
+        self.dynamodb = get_dynamodb_resource()
+        self.session_repository = DynamoDBSessionRepository()
+        self.session_table = get_chat_session_table()
+    
+    def _item_to_chat_record(self, item: dict) -> ChatRecord:
+        """
+        Convert a DynamoDB item to a ChatRecord object.
+        
+        :param item: The DynamoDB item to convert.
+        :return: A ChatRecord object.
+        """
+        return ChatRecord(
+            id=item['id'], 
+            agent_id=item['agent_id'], 
+            user_id=item.get('user_id', ''),
+            user_message=item['user_message'], 
+            create_time=item['create_time'],
+            record_type=item.get('record_type', 'agent'),
+            config=item.get('config'),
+            status=item.get('status'),
+            end_time=item.get('end_time'),
+            results=item.get('results'),
+            error=item.get('error')
+        )
 
     def add_chat_record(self, record: ChatRecord):
         """
@@ -570,50 +600,128 @@ class ChatRecordService:
         if (not record.id):
             record.id = uuid.uuid4().hex
         
-        table = self.dynamodb.Table(self.chat_record_table_name)
-        table.put_item(
-            Item={
-                'id': record.id,
-                'agent_id': record.agent_id,
-                'user_message': record.user_message,
-                'create_time': record.create_time
-            }   
-        )
+        # table = self.dynamodb.Table(self.chat_record_table_name)
+        table = get_chat_record_table()
+        
+        # 构建基本项目
+        item = {
+            'user_id': record.user_id,
+            'id': record.id,
+            'agent_id': record.agent_id,
+            'user_message': record.user_message,
+            'create_time': record.create_time,
+            'record_type': record.record_type
+        }
+        
+        # 添加编排相关字段（如果存在）
+        if record.config is not None:
+            item['config'] = record.config
+        if record.status is not None:
+            item['status'] = record.status
+        if record.end_time is not None:
+            item['end_time'] = record.end_time
+        if record.results is not None:
+            item['results'] = record.results
+        if record.error is not None:
+            item['error'] = record.error
+            
+        table.put_item(Item=item)
     
-    def get_chat_record(self, id: str) -> ChatRecord:
+    def get_chat_record(self, user_id: str, id: str) -> ChatRecord:
         """
         Retrieve a chat record by its ID from Amazon DynamoDB.
 
+        :param user_id: The user ID
         :param id: The ID of the chat record to retrieve.
         :return: A ChatRecord object if found, otherwise None.
         
         """
-        table = self.dynamodb.Table(self.chat_record_table_name)
-        response = table.get_item(Key={'id': id})
-
-        if 'Item' in response:
-            item = response['Item']
-            return ChatRecord(id=item['id'], agent_id=item['agent_id'], user_message=item['user_message'], create_time=item['create_time'])
+        # table = self.dynamodb.Table(self.chat_record_table_name)
+        table = get_chat_record_table()
+        keys = [user_id, 'public']
+        for k in keys:
+            response = table.get_item(Key={'user_id': k, 'id': id})
+            if 'Item' in response:
+                return self._item_to_chat_record(response['Item'])
         return None
-
     
-    def get_chat_records(self) -> List[ChatRecord]:
+    def get_chat_records_by_user(self, user_id: str, record_type: Optional[str] = None) -> List[ChatRecord]:
         """
-        Retrieve all chat records from Amazon DynamoDB.
+        Retrieve chat records for a specific user from Amazon DynamoDB.
+        This includes records with the matching user_id and legacy records without user_id.
 
-        :return: A list of ChatRecord objects.
+        :param user_id: The user ID to filter by.
+        :param record_type: Optional filter by record type ("agent" or "orchestration")
+        :return: A list of ChatRecord objects for the user.
         """
-        table = self.dynamodb.Table(self.chat_record_table_name)
-        response = table.scan(Limit=100)
-        items = response.get('Items', [])
+        # table = self.dynamodb.Table(self.chat_record_table_name)
+        table = get_chat_record_table()
+        keys = [user_id, 'public']
+        items = []
+        
+         # 查询两个分区键(user_id和'public')，并合并结果
+        for k in keys:
+            response = None
+            if not record_type:
+                response = table.query(
+                    KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(k),
+                    Limit=100
+                )
+            else:
+                filter_expression = Attr('record_type').not_exists() | Attr('record_type').eq(record_type)  if record_type =='agent' else Attr('record_type').eq(record_type)
+                response = table.query(
+                    KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(k),
+                    FilterExpression=filter_expression,
+                    Limit=100
+                )
+            items.extend(response.get('Items', []))
+
         if items:
-            result = [ChatRecord(id=item['id'], agent_id=item['agent_id'], user_message=item['user_message'], create_time=item['create_time']) for item in items]
+            result = [self._item_to_chat_record(item) for item in items]
+
+            # # 按record_type过滤（如果指定）
+            # if record_type:
+            #     result = [r for r in result if r.record_type == record_type]
+
+            return sorted(result, key=lambda x: x.create_time, reverse=True)
+        return []
+    
+    def get_records_by_agent_id(self, user_id: str, agent_id: str, record_type: Optional[str] = None) -> List[ChatRecord]:
+        """
+        Retrieve chat records for a specific user and agent_id from Amazon DynamoDB.
+        
+        :param user_id: The user ID to filter by.
+        :param agent_id: The agent ID to filter by.
+        :param record_type: Optional filter by record type ("agent" or "orchestration")
+        :return: A list of ChatRecord objects for the user and agent.
+        """
+        # table = self.dynamodb.Table(self.chat_record_table_name)
+        table = get_chat_record_table()
+        keys = [user_id, 'public']
+        items = []
+        
+        for k in keys:
+            # 动态构建FilterExpression
+            filter_expression = Attr('agent_id').eq(agent_id)
+            if record_type:
+                filter_expression = filter_expression & Attr('record_type').eq(record_type)
+            
+            response = table.query(
+                KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(k),
+                FilterExpression=filter_expression,
+                Limit=100
+            )
+            items.extend(response.get('Items', []))
+
+        if items:
+            result = [self._item_to_chat_record(item) for item in items]
 
             return sorted(result, key=lambda x: x.create_time, reverse=True)
         return []
     
     def add_chat_response(self, response: ChatResponse):
         """
+        @Deplicated
         Add a chat response to Amazon DynamoDB.
 
         :param response: The ChatResponse object to add.
@@ -630,6 +738,7 @@ class ChatRecordService:
 
     def get_all_chat_responses(self, chat_id: str) -> List[ChatResponse]:
         """
+        @Deplicated
         Retrieve all chat responses for a given chat ID from Amazon DynamoDB.
 
         :param chat_id: The ID of the chat to retrieve responses for.
@@ -642,102 +751,69 @@ class ChatRecordService:
             return [ChatResponse(chat_id=item['id'], resp_no=item['resp_no'], content=item['content'], create_time=item['create_time']) for item in items]
         return []
     
-    def del_chat(self, id: str):
+    def get_all_chat_responses_from_session(self, chat_id: str, agent_id: str) -> List[ChatResponse]:
+        """
+        Retrieve all chat responses for a given chat ID from the session repository.
+        This method tries to get messages from the session repository first, then falls back to legacy method.
+
+        :param chat_id: The ID of the chat to retrieve responses for (used as session_id).
+        :param agent_id: The agent ID to get messages for.
+        :return: A list of ChatResponse objects.
+        """
+        try:
+            # Try to get messages from session repository first
+            session_agent_id = f"{agent_id}_{chat_id}"
+            print(f"Retrieving messages from session repository for chat_id: {chat_id}, session_agent_id: {session_agent_id}")
+            
+            session_messages = self.session_repository.list_messages(session_id=chat_id, agent_id=session_agent_id, read_attachment=False)
+            
+            if session_messages:
+                # Convert session messages to ChatResponse format
+                chat_responses = []
+                for i, session_message in enumerate(session_messages):
+                    # Convert SessionMessage back to event format for compatibility
+                    message_dict = session_message.to_dict()
+                    chat_resp = ChatResponse(
+                        chat_id=chat_id,
+                        resp_no=i,
+                        content=json.dumps(message_dict),
+                        create_time=session_message.created_at
+                    )
+                    chat_responses.append(chat_resp)
+                return chat_responses
+        except Exception as e:
+            print(f"Error retrieving messages from session repository: {e}")
+        
+        # Fall back to legacy method
+        return self.get_all_chat_responses(chat_id)
+
+    def del_chat(self, user_id: str, id: str):
         """
         Delete Chat Record and Chat Responses by its ID from Amazon DynamoDB.
+        Also attempts to clean up session data if it exists.
 
-        :param id: The ID of the agent to delete.
+        :param user_id: The user ID
+        :param id: The ID of the chat to delete.
         """
-        table = self.dynamodb.Table(self.chat_record_table_name)
-        table.delete_item(Key={'id': id})
+        table = get_chat_record_table()
+        table.delete_item(Key={'user_id': user_id, 'id': id})
+        try:
+            
+            msgs = self.session_table.query(
+                KeyConditionExpression = boto3.dynamodb.conditions.Key('PK').eq(id)
+            )
+            items = msgs['Items']
+            deleted_count = 0
+            with self.session_table.batch_writer() as batch:
+                for item in items:
+                    batch.delete_item(
+                        Key={
+                            'PK': item['PK'],
+                            'SK': item['SK']
+                        }
+                    )
+                    deleted_count +=1
+            print(f"delete session: {id}, msg count: {deleted_count}")
 
-        table = self.dynamodb.Table(self.chat_response_table_name)
-        response = table.query(
-            KeyConditionExpression=boto3.dynamodb.conditions.Key('id').eq(id)
-        )
-        
-        items = response['Items']
-        deleted_count = 0
-        
-        # 批量删除项目
-        with table.batch_writer() as batch:
-            for item in items:
-                batch.delete_item(
-                    Key={
-                        'id': item['id'],
-                        'resp_no': item['resp_no']
-                    }
-                )
-                deleted_count += 1
-        print(f"delete chat:{id}, count:{deleted_count}")
-    
-
-
-if __name__ == "__main__":
-    # Example usage
-    # agent = AgentPOBuilder() \
-    #     .set_id(uuid.uuid4().hex) \
-    #     .set_name("utility_agent") \
-    #     .set_display_name("测试Agent") \
-    #     .set_description("You are an agent that can get do all kinds of calculation and get current time") \
-    #     .set_agent_type(AgentType.plain) \
-    #     .set_model_provider(ModelProvider.bedrock) \
-    #     .set_model_id("us.anthropic.claude-3-7-sonnet-20250219-v1:0") \
-    #     .set_sys_prompt("You are a helpful assistant.") \
-    #     .set_tools([AgentTool(name="calculator", catagory="utilities", desc="Perform calculations and mathematical operations"),
-    #                 AgentTool(name="current_time", catagory="utilities", desc="Get the current time and date")]) \
-    #     .build()
-    
-    # agent_with_mcp_tool = AgentPOBuilder() \
-    #     .set_id(uuid.uuid4().hex) \
-    #     .set_name("rds_agent") \
-    #     .set_display_name("AWs RDS Agent") \
-    #     .set_description("An Agent with RDS MySQL MCP Server") \
-    #     .set_agent_type(AgentType.plain) \
-    #     .set_model_provider(ModelProvider.bedrock) \
-    #     .set_model_id("us.anthropic.claude-3-7-sonnet-20250219-v1:0") \
-    #     .set_sys_prompt("You are an senior MySQL expert and are proficient at SQL and MySQL operation") \
-    #     .set_tools([AgentTool(name="", catagory="mysql", desc="MySQL MCP Server that can execute sql and get database and table statistics ", 
-    #                           type=AgentToolType.mcp, mcp_server_url="http://localhost:3000/mcp") ]) \
-    #     .build()
-    
-    # orchestrator = AgentPOBuilder() \
-    #     .set_id(uuid.uuid4().hex) \
-    #     .set_name("orchestrator_agent") \
-    #     .set_display_name("Orchestrator Agent") \
-    #     .set_description("An orchestrator agent") \
-    #     .set_agent_type(AgentType.orchestrator) \
-    #     .set_model_id("us.anthropic.claude-3-7-sonnet-20250219-v1:0") \
-    #     .set_sys_prompt("You are an orchestrator agent, you can help me do many things.") \
-    #     .set_tools([AgentTool(name="utilities_tools", catagory="utilities", desc="General utility tools that can do all kinds of calculation and get current time", type= AgentToolType.agent,agent_id="9b33d98d425c44249db926ce5015b28d")]) \
-    #     .build()
-
-    # orchestrator = Agent(
-    #     system_prompt="You are an orchestrator agent, you can help me do many things.",
-    #     model="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-    #     tools=[agent_as_tool(agent)]
-    # )
-
-    # orchestrator("100+100 等于多少")
-
-    # print(agent)
-
-    agent_service = AgentPOService()
-    # agent_service.add_agent(agent)
-
-    # query_ret = agent_service.get_agent("9b33d98d425c44249db926ce5015b28d")
-    # print("Query Result:")
-    # print(query_ret)
-
-    # print("List of Agents:")
-    # print(agent_service.list_agents())
-
-    # strands_agent = agent_service.build_strands_agent(orchestrator)
-    # strands_agent("100*300 等于多少")
-
-    # strands_agent_with_mcp_tool = agent_service.build_strands_agent(agent_with_mcp_tool)
-    # strands_agent_with_mcp_tool("mydata 数据库中一共有多少张表? 一共有多少行数据?")
-
-    agentPO = agent_service.get_agent(id= "0de59ed3181c417f9ede8472386bcd4a")
-    strands_agent = agent_service.build_strands_agent(agentPO)
-    strands_agent("Help me inspect the RDS cluster and all EC2 instances in us-west-2 region on 2025-07-13")
+        except Exception as e:
+            print(f"Error checking session data for chat {id}: {e}")

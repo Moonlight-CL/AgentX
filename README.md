@@ -6,12 +6,30 @@ AgentX is an agent management platform built on top of the Strands framework, al
 
 ## 🌟 Features
 
+### Core Platform Features
+- **User Authentication**: Secure user registration and login system with JWT token-based authentication
+- **Data Isolation**: Each user's agents, chat records, and data are completely isolated from other users
 - **Agent Management**: Create, configure, and manage AI agents through a user-friendly interface
 - **Multiple Model Support**: Use models from Bedrock, OpenAI, Anthropic, LiteLLM, Ollama, or custom providers
+- **Chat History Management**: View, manage, and delete your conversation history with proper error handling
+
+### Advanced Capabilities
 - **Extensive Tool Library**: Equip agents with tools for RAG, file operations, web interactions, image generation, and more
-- **Agent Orchestration**: Create orchestrator agents that can coordinate with other agents
-- **Scheduling**: Schedule agent tasks to run automatically at specified times
-- **MCP Integration**: Extend agent capabilities with Model Context Protocol servers
+- **Agent Orchestration**: Create orchestrator agents that can coordinate with other agents to handle complex workflows
+- **Scheduling System**: Schedule agent tasks to run automatically at specified times using AWS EventBridge
+- **Configuration Management**: Centralized configuration system for managing agent settings and preferences
+
+### MCP Integration
+- **Model Context Protocol Support**: Extend agent capabilities with specialized MCP servers
+- **Database Integration**: Connect to MySQL, Redshift, DuckDB, and OpenSearch databases
+- **AWS Services Integration**: Built-in AWS database evaluation and analysis tools
+- **Custom MCP Servers**: Support for adding custom MCP servers to extend functionality
+
+### Enterprise Features
+- **Scalable Architecture**: Built on AWS ECS with auto-scaling capabilities
+- **High Availability**: Multi-AZ deployment with load balancing
+- **Monitoring & Logging**: Comprehensive logging with CloudWatch integration
+- **Security**: IAM-based access control and VPC isolation
 
 ## 🏗️ Architecture
 
@@ -67,23 +85,48 @@ Model Context Protocol servers that extend agent capabilities:
 
 3. **Set up local DynamoDB tables**:
    
-   For local development, you need to create the following DynamoDB tables:
+   For local development, you need to create the following DynamoDB tables. These tables support the core functionality of AgentX including user management, agent storage, chat history, and MCP server configuration:
    
-   - **AgentTable**
-     - Partition key: `id` (String)
+   **Core Tables:**
    
-   - **ChatRecordTable**
-     - Partition key: `id` (String)
+   - **UserTable** (User authentication and management)
+     - Partition key: `user_id` (String)
    
-   - **ChatResponseTable**
+   - **AgentTable** (Agent configurations and metadata)
+     - Partition key: `user_id` (String)
+     - Sort key: `id` (String)
+   
+   - **ChatRecordTable** (Chat session records)
+     - Partition key: `user_id` (String)
+     - Sort key: `id` (String)
+   
+   - **ChatResponseTable** (Individual chat messages and responses)
      - Partition key: `id` (String)
      - Sort key: `resp_no` (Number)
    
-   - **HttpMCPTable**
+   - **ChatSessionTable** (Chat session management and memory storage)
+     - Partition key: `PK` (String)
+     - Sort key: `SK` (String)
+   
+   **MCP and Advanced Features:**
+   
+   - **HttpMCPTable** (MCP server configurations)
+     - Partition key: `user_id` (String)
+     - Sort key: `id` (String)
+   
+   - **AgentScheduleTable** (Scheduled agent tasks)
      - Partition key: `id` (String)
    
-   - **AgentScheduleTable**
-     - Partition key: `id` (String)
+   **Additional Tables** (used by orchestration and configuration features):
+   
+   - **OrcheTable** (Orchestration workflows)
+     - Partition key: `user_id` (String)
+     - Sort key: `id` (String)
+   
+   - **ConfTable** (System configurations)
+     - Partition key: `key` (String)
+   
+   > **Note**: When deploying to AWS, these tables are automatically created by the CDK stack. For local development with DynamoDB Local, you'll need to create them manually or use the AWS CLI with `--endpoint-url` pointing to your local DynamoDB instance.
 
 4. **Set up the frontend**:
    ```bash
