@@ -57,13 +57,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSubmit, onCancel, loadin
         const result = await fileAPI.uploadFiles(filesToUpload);
         uploadedFiles = result.files;
       } catch (error) {
-        message.error('Failed to upload files');
+        // message.error(`Failed to upload files`);
+        if (typeof error === 'string') {
+          message.error(error);
+        } else if (error instanceof Error) {
+          message.error(error.message);
+        } else if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as any).message === 'string') {
+          message.error((error as any).message);
+        } else {
+          message.error('Failed to upload files');
+        }
         return;
       } finally {
         setUploading(false);
       }
     }
-    
     onSubmit(inputValue, uploadedFiles);
     setInputValue('');
     setFileList([]);
@@ -163,7 +171,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSubmit, onCancel, loadin
                         <Space>
                           <Attachments
                             beforeUpload={(file) => {
-                              const isLt2M = file.size / 1024 / 1024 < 2;
+                              const isLt2M = file.size / 1024 / 1024 < 10;
                               if (!isLt2M) {
                                 message.error('文件必须小于2MB!');
                                 return false;

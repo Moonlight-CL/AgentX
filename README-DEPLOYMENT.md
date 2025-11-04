@@ -236,6 +236,11 @@ The CDK deployment creates the following DynamoDB tables with user authenticatio
 - **Sort Key**: `resp_no` (Number)
 - **Purpose**: Stores agent responses for each chat conversation
 
+#### ChatSessionTable (Chat session management and memory storage)
+- **Partition Key**: `PK` (String)
+- **Sort Key**: `SK` (String)
+- **Purpose**: Stores chat session data and memory information for agent conversations, enabling persistent context across chat interactions
+
 **MCP and Advanced Features:**
 
 #### HttpMCPTable (MCP server configurations)

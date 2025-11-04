@@ -104,6 +104,10 @@ Model Context Protocol servers that extend agent capabilities:
      - Partition key: `id` (String)
      - Sort key: `resp_no` (Number)
    
+   - **ChatSessionTable** (Chat session management and memory storage)
+     - Partition key: `PK` (String)
+     - Sort key: `SK` (String)
+   
    **MCP and Advanced Features:**
    
    - **HttpMCPTable** (MCP server configurations)

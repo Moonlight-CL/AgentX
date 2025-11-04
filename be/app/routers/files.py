@@ -39,9 +39,11 @@ async def upload_files(request: Request, files: List[UploadFile] = File(...)) ->
             file_content = await file.read()
             
             # Validate file size (max 50MB)
-            if len(file_content) > 50 * 1024 * 1024:
-                raise HTTPException(status_code=413, detail=f"File {file.filename} is too large. Maximum size is 50MB.")
+            if len(file_content) > 10 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail=f"File {file.filename} is too large. Maximum size is 10MB.")
             
+            if not file.filename.isascii():
+                raise HTTPException(status_code=413, detail=f"File Name can only contain ASCII characters: {file.filename} ")
             # Upload to S3
             file_info = s3_service.upload_file(
                 file_content=file_content,
