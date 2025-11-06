@@ -237,6 +237,59 @@ const formatFileContent = (content: any, contentType: 'image' | 'video' | 'docum
   return result;
 };
 
+// Helper function to check if text is S3 reference JSON
+const isS3ReferenceJson = (text: string): boolean => {
+  try {
+    const parsed = JSON.parse(text);
+    return parsed._filename && (parsed._image || parsed._video || parsed._document);
+  } catch {
+    return false;
+  }
+};
+
+// Helper function to format S3 reference as file display
+const formatS3Reference = (text: string): string => {
+  try {
+    const parsed = JSON.parse(text);
+    const filename = parsed._filename;
+    
+    if (parsed._image) {
+      const sourcePath = parsed._image._source_path;
+      const s3Key = extractS3KeyFromPath(sourcePath);
+      return generateFileDownloadLink(s3Key, filename, 'image');
+    } else if (parsed._video) {
+      const sourcePath = parsed._video._source_path;
+      const s3Key = extractS3KeyFromPath(sourcePath);
+      return generateFileDownloadLink(s3Key, filename, 'video');
+    } else if (parsed._document) {
+      const sourcePath = parsed._document._source_path;
+      const s3Key = extractS3KeyFromPath(sourcePath);
+      return generateFileDownloadLink(s3Key, filename, 'document');
+    }
+    
+    return text; // fallback to original text
+  } catch {
+    return text; // fallback to original text
+  }
+};
+
+// helper function to extract S3 key from S3 Path
+const extractS3KeyFromPath = (path: string): string => {
+  if (!path || typeof path !== 'string') return '';
+
+  // Typical form: s3://bucket/key/to/object
+  const match = path.match(/^s3:\/\/[^\/]+\/(.+)$/);
+  if (match && match[1]) return match[1];
+
+  // Fallback: strip s3:// if present and return everything after the first slash
+  const stripped = path.replace(/^s3:\/\//, '');
+  const idx = stripped.indexOf('/');
+  if (idx >= 0) return stripped.slice(idx + 1);
+
+  // No key found
+  return '';
+};
+
 // Format message event
 const formatMessageEvent = (event: MessageEvent): string => {
   const message = event.message; 
@@ -245,6 +298,13 @@ const formatMessageEvent = (event: MessageEvent): string => {
   message.content.forEach((content, index) => {
     if (content.text) {
       const text = content.text;
+      
+      // Check if this is an S3 reference JSON
+      if (isS3ReferenceJson(text)) {
+        result += '\n' + formatS3Reference(text);
+        return;
+      }
+      
       // Check if the text contains HTML code blocks
       const htmlBlocks = extractHtmlCodeBlocks(text);
       

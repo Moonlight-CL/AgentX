@@ -15,7 +15,7 @@ export const useAgent = () => {
 
   // Custom request function for the agent
   const customRequest = async (
-    info: { message: {content: string, fileattachments?: any[]}},
+    info: { message: {content: string, fileattachments?: any[], useS3Reference?: boolean}},
     callbacks: {
       onUpdate: (chunk: string) => void;
       onSuccess: (chunks: string[]) => void;
@@ -53,7 +53,8 @@ export const useAgent = () => {
         info.message.content,
         chatRecordEnabled,
         currentChatId || undefined,  // Pass current chat ID for session continuation
-        info.message.fileattachments  // Pass file attachments
+        info.message.fileattachments,  // Pass file attachments
+        info.message.useS3Reference  // Pass S3 reference flag
       );
       
       if (!response.ok) {
@@ -240,7 +241,7 @@ export const useAgent = () => {
 
 
   // Use useEffect to create a memoized handleSubmit function that updates when selectedAgent changes
-  const handleSubmit = (val: string, fileattachments?: any[]) => {
+  const handleSubmit = (val: string, fileattachments?: any[], useS3Reference?: boolean) => {
     if (!val && (!fileattachments || fileattachments.length === 0)) return;
 
     if (loading) {
@@ -260,7 +261,7 @@ export const useAgent = () => {
     // The customRequest function will access it from the message object
     onRequest({
       stream: true,
-      message: {role: 'user', content: val, fileattachments: fileattachments, userinput: "true"}
+      message: {role: 'user', content: val, fileattachments: fileattachments, useS3Reference: useS3Reference, userinput: "true"}
     });
   };
 
