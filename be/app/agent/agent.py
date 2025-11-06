@@ -387,6 +387,8 @@ class AgentPOService:
             :param cls_name: Name of the tool class
             :return: Dictionary of parameters
             """
+            import os
+            
             params = {}
             agent_name = agent_name.replace(' ', '_')
             prefix = f"{agent_name}_{cls_name}"
