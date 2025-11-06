@@ -1135,7 +1135,7 @@ export const agentAPI = {
   },
   
   // Stream chat with an agent
-  streamChat: (agentId: string, userMessage: string, chatRecordEnabled: boolean = true, chatRecordId?: string, fileAttachments?: any[]): Promise<Response> => {
+  streamChat: (agentId: string, userMessage: string, chatRecordEnabled: boolean = true, chatRecordId?: string, fileAttachments?: any[], useS3Reference?: boolean): Promise<Response> => {
     // Get token for SSE request
     const token = localStorage.getItem('user-storage');
     // console.log('Retrieved token from localStorage:', token);
@@ -1166,6 +1166,11 @@ export const agentAPI = {
     // Add file attachments if provided
     if (fileAttachments && fileAttachments.length > 0) {
       requestBody.file_attachments = fileAttachments;
+    }
+    
+    // Add useS3Reference flag if provided
+    if (useS3Reference !== undefined) {
+      requestBody.use_s3_reference = useS3Reference;
     }
     
     // Use fetch API to make a POST request with proper headers for SSE

@@ -14,7 +14,7 @@ class S3StorageService:
     
     def __init__(self):
         self.s3_client = boto3.client('s3')
-        self.bucket_name = os.getenv('S3_BUCKET_NAME', 'emr-resc')
+        self.bucket_name = os.getenv('S3_BUCKET_NAME', 'agentx-bkt')
         self.s3_prefix = os.getenv('S3_FILE_PREFIX', 'agentx/files')
         
     def upload_file(self, file_content: bytes, filename: str, content_type: Optional[str] = None) -> Dict[str, Any]:
@@ -63,6 +63,7 @@ class S3StorageService:
             return {
                 'file_id': unique_filename.split('.')[0],
                 's3_key': s3_key,
+                's3_path': f"s3://{self.bucket_name}/{s3_key}",
                 'original_filename': filename,
                 'content_type': content_type,
                 'file_size': len(file_content),

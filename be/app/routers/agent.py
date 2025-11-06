@@ -1,6 +1,7 @@
 from datetime import datetime
 import uuid
 import json
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -10,6 +11,19 @@ from ..agent.event_serializer import EventSerializer
 from ..utils.s3_storage import S3StorageService
 from ..utils.content_converter import ContentConverter
 from ..user.auth import get_current_user
+
+@dataclass
+class ChatRequestData:
+    """
+    Data class to hold parsed chat request information
+    """
+    agent_id: Optional[str]
+    user_message: Optional[str]
+    chat_id: str
+    chat_record_enabled: bool
+    user_id: str
+    file_attachments: Optional[List[Dict]]
+    use_s3_reference: bool
 
 agent_service = AgentPOService()
 chat_reccord_service = ChatRecordService()
@@ -86,12 +100,12 @@ async def create_agent(request: Request, current_user: dict = Depends(get_curren
     agent_service.add_agent(agent_po, user_id)
     return agent_po
 
-async def parse_chat_request_and_add_record(request: Request) -> Tuple[Optional[str], Optional[str], str, bool, str, Optional[List[Dict]]]:
+async def parse_chat_request_and_add_record(request: Request) -> ChatRequestData:
     """
     Parse a chat request to extract agent_id, user_message, file_attachments, and handle chat record.
     
     :param request: The request containing the chat parameters.
-    :return: A tuple of (agent_id, user_message, chat_id, chat_record_enabled, user_id, file_attachments).
+    :return: ChatRequestData object containing all parsed information.
     """
     data = await request.json()
     agent_id = data.get("agent_id")
@@ -99,6 +113,7 @@ async def parse_chat_request_and_add_record(request: Request) -> Tuple[Optional[
     file_attachments = data.get("file_attachments", [])  # List of file info from S3 uploads
     chat_record_id = data.get("chat_record_id")  # New parameter for continuing conversation
     chat_record_enabled = data.get("chat_record_enabled", True)  # Default to True if not provided
+    use_s3_reference = data.get("use_s3_reference", False)  # Default to False (existing behavior)
     
     # Get current user from request state (set by AuthMiddleware)
     current_user = getattr(request.state, 'current_user', None)
@@ -138,9 +153,17 @@ async def parse_chat_request_and_add_record(request: Request) -> Tuple[Optional[
             )
             chat_reccord_service.add_chat_record(chat_record)
     
-    return agent_id, user_message, chat_id, chat_record_enabled, user_id, file_attachments
+    return ChatRequestData(
+        agent_id=agent_id,
+        user_message=user_message,
+        chat_id=chat_id,
+        chat_record_enabled=chat_record_enabled,
+        user_id=user_id,
+        file_attachments=file_attachments,
+        use_s3_reference=use_s3_reference
+    )
 
-async def process_chat_events_with_session(user_id: str, agent_id: str, user_input: str, chat_id: str, file_attachments: Optional[List[Dict]] = None, chat_record_enabled: bool = True) -> AsyncGenerator[Dict, None]:
+async def process_chat_events_with_session(user_id: str, agent_id: str, user_input: str, chat_id: str, file_attachments: Optional[List[Dict]] = None, chat_record_enabled: bool = True, use_s3_reference: bool = False) -> AsyncGenerator[Dict, None]:
     """
     Process chat events using session management. Chat content is automatically stored in ChatSessionTable via DynamoDBSessionRepository.
     
@@ -150,6 +173,7 @@ async def process_chat_events_with_session(user_id: str, agent_id: str, user_inp
     :param chat_id: The ID of the chat record (used as session_id).
     :param file_attachments: List of file attachment info from S3.
     :param chat_record_enabled: Whether chat recording is enabled (for compatibility).
+    :param use_s3_reference: Whether to use S3 references instead of binary content.
     :yield: Chat events.
     """
     agent = agent_service.get_agent(user_id, agent_id)
@@ -162,7 +186,7 @@ async def process_chat_events_with_session(user_id: str, agent_id: str, user_inp
     # Convert text and files to content blocks if files are present
     if file_attachments:
         content_converter = ContentConverter()
-        content_blocks = content_converter.create_content_blocks(user_input, file_attachments)
+        content_blocks = content_converter.create_content_blocks(user_input, file_attachments, use_s3_reference)
         # Stream events with content blocks
         async for event in agent_instance.stream_async(content_blocks):
             yield event
@@ -202,9 +226,9 @@ async def stream_chat(request: Request) -> StreamingResponse:
     :param request: The request containing the chat parameters.
     :return: A stream of chat messages.
     """
-    agent_id, user_message, chat_id, chat_record_enabled, user_id, file_attachments = await parse_chat_request_and_add_record(request)
+    chat_data = await parse_chat_request_and_add_record(request)
     
-    if not agent_id or not user_message:
+    if not chat_data.agent_id or not chat_data.user_message:
         return "Agent ID and user message are required."
     
     async def event_generator():
@@ -212,11 +236,19 @@ async def stream_chat(request: Request) -> StreamingResponse:
         Generator function to yield SSE formatted events.
         """
         # First, send the chat_id to the frontend for session tracking
-        chat_id_event = {"chat_id": chat_id}
+        chat_id_event = {"chat_id": chat_data.chat_id}
         yield EventSerializer.format_as_sse(chat_id_event)
         
         # Then stream the actual chat events
-        async for event in process_chat_events_with_session(user_id, agent_id, user_message, chat_id, file_attachments, chat_record_enabled):
+        async for event in process_chat_events_with_session(
+            chat_data.user_id, 
+            chat_data.agent_id, 
+            chat_data.user_message, 
+            chat_data.chat_id, 
+            chat_data.file_attachments, 
+            chat_data.chat_record_enabled, 
+            chat_data.use_s3_reference
+        ):
             # Format the event as an SSE
             yield EventSerializer.format_as_sse(event)
     
@@ -232,16 +264,22 @@ async def stream_chat_legacy(request: Request) -> StreamingResponse:
     :param request: The request containing the chat parameters.
     :return: A stream of chat messages.
     """
-    agent_id, user_message, chat_id, chat_record_enabled, user_id, file_attachments = await parse_chat_request_and_add_record(request)
+    chat_data = await parse_chat_request_and_add_record(request)
     
-    if not agent_id or not user_message:
+    if not chat_data.agent_id or not chat_data.user_message:
         return "Agent ID and user message are required."
     
     async def event_generator():
         """
         Generator function to yield SSE formatted events.
         """
-        async for event in process_chat_events(user_id, agent_id, user_message, chat_id, chat_record_enabled):
+        async for event in process_chat_events(
+            chat_data.user_id, 
+            chat_data.agent_id, 
+            chat_data.user_message, 
+            chat_data.chat_id, 
+            chat_data.chat_record_enabled
+        ):
             # Format the event as an SSE
             yield EventSerializer.format_as_sse(event)
     
@@ -260,9 +298,9 @@ async def async_chat(request: Request, background_tasks: BackgroundTasks) -> JSO
     :param background_tasks: FastAPI's BackgroundTasks for background processing.
     :return: A JSON response with the chat ID.
     """
-    agent_id, user_message, chat_id, chat_record_enabled, user_id, file_attachments = await parse_chat_request_and_add_record(request)
+    chat_data = await parse_chat_request_and_add_record(request)
     
-    if not agent_id or not user_message:
+    if not chat_data.agent_id or not chat_data.user_message:
         return JSONResponse(
             status_code=400,
             content={"error": "Agent ID and user message are required."}
@@ -271,18 +309,18 @@ async def async_chat(request: Request, background_tasks: BackgroundTasks) -> JSO
     # Add the processing task to background tasks
     background_tasks.add_task(
         process_chat_in_background,
-        user_id=user_id,
-        agent_id=agent_id,
-        user_message=user_message,
-        chat_id=chat_id,
-        chat_record_enabled=chat_record_enabled
+        user_id=chat_data.user_id,
+        agent_id=chat_data.agent_id,
+        user_message=chat_data.user_message,
+        chat_id=chat_data.chat_id,
+        chat_record_enabled=chat_data.chat_record_enabled
     )
     
     # Return immediately with the chat ID
     return JSONResponse(
         content={
             "status": "processing",
-            "chat_id": chat_id,
+            "chat_id": chat_data.chat_id,
             "message": "Your request is being processed in the background."
         }
     )

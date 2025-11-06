@@ -377,7 +377,31 @@ class AgentPOService:
         :param agent: The AgentPO object to build the Strands agent from.
         :return: A Strands Agent instance.
         """
-        print(kwargs)
+        
+        def _get_tool_params(agent_name: str, cls_name: str) -> dict:
+            """
+            Get tool parameters from environment variables based on agent name and class name.
+            Format: AGENT_{agent_name}_{cls_name}_{param_name}=value
+            
+            :param agent_name: Name of the agent
+            :param cls_name: Name of the tool class
+            :return: Dictionary of parameters
+            """
+            params = {}
+            agent_name = agent_name.replace(' ', '_')
+            prefix = f"{agent_name}_{cls_name}"
+            print(f"prefix:{prefix}")
+
+            if cls_name == 'AgentCoreCodeInterpreter' or cls_name == 'AgentCoreBrowser':
+                key = f"{prefix}_identifier"
+                val = os.environ.get(key)
+                print(f"{key}, val: {val}")
+                if val:
+                    params['identifier'] = val
+ 
+            return params
+
+
         # Parse and set environment variables if they exist
         if agent.envs:
             for line in agent.envs.strip().split('\n'):
@@ -407,7 +431,9 @@ class AgentPOService:
                         method_name = name_segs[-1]
                         module = importlib.import_module(module_name)
                         cls = getattr(module, class_name)
-                        obj = cls()
+                        
+                        cls_params = _get_tool_params(agent.name, class_name)
+                        obj = cls(**cls_params)
                         method = getattr(obj, method_name)
                         tools.append(method)
                     else:
@@ -478,10 +504,14 @@ class AgentPOService:
             tools.extend(kwargs['additional_tools'])
             kwargs.pop('additional_tools')
 
+        from strands.agent.conversation_manager import SlidingWindowConversationManager
+        conversation_Manager = SlidingWindowConversationManager(window_size = 100)
+
         return Agent(
             system_prompt=agent.sys_prompt,
             model=model,
             tools=tools,
+            conversation_manager= conversation_Manager,
             **kwargs
         )
     

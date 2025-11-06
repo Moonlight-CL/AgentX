@@ -8,7 +8,7 @@ import type { Agent } from '../../services/api';
 import { fileAPI } from '../../services/api';
 
 interface ChatInputProps {
-  onSubmit: (text: string, fileattachments?: any[]) => void;
+  onSubmit: (text: string, fileattachments?: any[], useS3Reference?: boolean) => void;
   onCancel: () => void;
   loading: boolean;
   setXChatMessages: (action: []) => void
@@ -33,6 +33,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSubmit, onCancel, loadin
   // File attachment state
   const [fileList, setFileList] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [useS3Reference, setUseS3Reference] = useState(false);
   
   // Fetch agents when component mounts
   useEffect(() => {
@@ -72,7 +73,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSubmit, onCancel, loadin
         setUploading(false);
       }
     }
-    onSubmit(inputValue, uploadedFiles);
+    onSubmit(inputValue, uploadedFiles, useS3Reference);
     setInputValue('');
     setFileList([]);
   };
@@ -192,6 +193,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSubmit, onCancel, loadin
                           >
                             <PaperClipOutlined style={{ cursor: 'pointer', fontSize: 16 }} />
                           </Attachments>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            As Reference
+                          </Typography.Text>
+                          <Switch 
+                            size="small" 
+                            checked={useS3Reference}
+                            onChange={(checked) => {
+                              setUseS3Reference(checked);
+                            }}
+                          />
                           <Divider type="vertical" />
                           <UserOutlined />
                           Chat History
