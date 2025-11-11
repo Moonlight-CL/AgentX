@@ -2,9 +2,9 @@ import boto3
 import uuid
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from enum import Enum
 from ..utils.aws_config import get_aws_region
 
@@ -20,6 +20,8 @@ class User(BaseModel):
     password_hash: str
     salt: str
     status: UserStatus = UserStatus.ACTIVE
+    is_admin: bool = False
+    user_groups: Optional[List[str]] = None  # List of user group IDs
     created_at: str
     updated_at: str
     last_login: Optional[str] = None
@@ -36,6 +38,8 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     email: Optional[str] = None
     status: Optional[UserStatus] = None
+    is_admin: Optional[bool] = None
+    user_groups: Optional[List[str]] = None
 
 class TokenData(BaseModel):
     user_id: str
@@ -100,12 +104,16 @@ class UserService:
             'password_hash': user.password_hash,
             'salt': user.salt,
             'status': user.status.value,
+            'is_admin': user.is_admin,
             'created_at': user.created_at,
             'updated_at': user.updated_at
         }
         
         if user.email:
             item['email'] = user.email
+        
+        if user.user_groups:
+            item['user_groups'] = user.user_groups
         
         table.put_item(Item=item)
         
@@ -194,6 +202,14 @@ class UserService:
         if user_data.status is not None:
             update_expression += ", #status = :status"
             expression_values[':status'] = user_data.status.value
+        
+        if user_data.is_admin is not None:
+            update_expression += ", is_admin = :is_admin"
+            expression_values[':is_admin'] = user_data.is_admin
+        
+        if user_data.user_groups is not None:
+            update_expression += ", user_groups = :user_groups"
+            expression_values[':user_groups'] = user_data.user_groups
         
         expression_names = {}
         if user_data.status is not None:
@@ -320,6 +336,8 @@ class UserService:
             password_hash=item['password_hash'],
             salt=item['salt'],
             status=UserStatus(item['status']),
+            is_admin=item.get('is_admin', False),
+            user_groups=item.get('user_groups'),
             created_at=item['created_at'],
             updated_at=item['updated_at'],
             last_login=item.get('last_login')

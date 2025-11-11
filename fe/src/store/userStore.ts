@@ -6,6 +6,8 @@ export interface User {
   username: string;
   email?: string;
   status: string;
+  is_admin?: boolean;
+  user_groups?: string[];
 }
 
 interface UserState {

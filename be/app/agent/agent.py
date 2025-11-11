@@ -114,6 +114,10 @@ class AgentPO(BaseModel):
     tools: List[AgentTool] = []
     envs: str = ""
     extras: Optional[dict] = None
+    shared_users: Optional[List[str]] = None  # List of user IDs this agent is shared with
+    shared_groups: Optional[List[str]] = None  # List of group IDs this agent is shared with
+    is_public: bool = False  # Whether this agent is public
+    creator: Optional[str] = None  # User ID of the agent creator
 
     def __repr__(self):
         return f"AgentPO(name={self.name}, display_name={self.display_name} description={self.description}, " \
@@ -207,12 +211,20 @@ class AgentPOService:
             'model_id': agent_po.model_id,
             'sys_prompt': agent_po.sys_prompt,
             'tools': [tool.model_dump_json() for tool in agent_po.tools],  # Convert tools to JSON string
-            'envs': agent_po.envs
+            'envs': agent_po.envs,
+            'is_public': agent_po.is_public
         }
         
         # Add extras if it exists
         if agent_po.extras:
             item['extras'] = agent_po.extras
+        
+        # Add sharing fields if they exist
+        if agent_po.shared_users:
+            item['shared_users'] = agent_po.shared_users
+        
+        if agent_po.shared_groups:
+            item['shared_groups'] = agent_po.shared_groups
             
         table.put_item(Item=item)
 
@@ -261,27 +273,99 @@ class AgentPOService:
             return [self._map_agent_item(item) for item in items[:limit]]
         return None
 
-    def list_agents(self, user_id: str) -> List[AgentPO]:
+    def list_agents(
+        self, user_id: str, user_groups: Optional[List[str]] = None
+    ) -> List[AgentPO]:
         """
         List AgentPO objects for a specific user from Amazon DynamoDB.
-        Includes both user-specific and public agents.
-        
+        Includes:
+        1. User's own agents
+        2. Public agents (is_public=True)
+        3. Agents shared with the user directly (shared_users contains user_id)
+        4. Agents shared with user's groups (shared_groups contains any of user's groups)
+
         :param user_id: The user ID for data isolation.
+        :param user_groups: List of group IDs the user belongs to.
         :return: A list of AgentPO objects.
         """
         table = self.dynamodb.Table(self.dynamodb_table_name)
-        keys = [user_id, 'public']
-        items = []
-        
-        for k in keys:
-            response = table.query(
-                KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(k),
-                Limit=100
-            )
-            items.extend(response.get('Items', []))
+        user_groups = user_groups or []
 
-        if items:
-            return [self._map_agent_item(item) for item in items]
+        # Get user's own agents
+        # user_agents = []
+        # response = table.query(
+        #     KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(user_id),
+        #     Limit=100,
+        # )
+        # user_agents.extend(response.get("Items", []))
+
+        # Get public agents
+        # public_agents = []
+        # response = table.query(
+        #     KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+        #         "public"
+        #     ),
+        #     Limit=100,
+        # )
+        # public_agents.extend(response.get("Items", []))
+
+        # Scan for shared agents (this is expensive but necessary for sharing functionality)
+        # In production, you might want to add a GSI for better performance
+        all_agents = []
+        try:
+            # Scan all agents to find those shared with this user or their groups
+            scan_response = table.scan()
+            all_items = scan_response.get("Items", [])
+
+            # Continue scanning if there are more items
+            while "LastEvaluatedKey" in scan_response:
+                scan_response = table.scan(
+                    ExclusiveStartKey=scan_response["LastEvaluatedKey"]
+                )
+                all_items.extend(scan_response.get("Items", []))
+
+            for item in all_items:
+                # Skip user's own agents and public agents (already included)
+                if item.get("user_id") == user_id or item.get("user_id") == "public":
+                    all_agents.append(item)
+                    continue
+
+                # Check if agent is public
+                if item.get("is_public", False):
+                    all_agents.append(item)
+                    continue
+
+                # Check if shared with user directly
+                shared_users = item.get("shared_users", [])
+                if user_id in shared_users:
+                    all_agents.append(item)
+                    continue
+
+                # Check if shared with any of user's groups
+                shared_groups = item.get("shared_groups", [])
+                if user_groups and any(group in shared_groups for group in user_groups):
+                    all_agents.append(item)
+                    continue
+
+        except Exception as e:
+            print(f"Error scanning for shared agents: {e}")
+
+        # Combine all agents and remove duplicates
+        # all_items = user_agents + public_agents + all_agents
+        # seen_ids = set()
+        # unique_items = []
+
+        # for item in all_items:
+        #     agent_id = item["id"]
+        #     if agent_id not in seen_ids:
+        #         seen_ids.add(agent_id)
+        #         unique_items.append(item)
+
+        # if unique_items:
+        #     return [self._map_agent_item(item) for item in unique_items]
+        if all_agents:
+            ret_agents = sorted([self._map_agent_item(item) for item in all_agents], key=lambda a: (a.name or "").lower())
+            return ret_agents
         return []
 
     def delete_agent(self, user_id: str, id: str) -> bool:
@@ -292,11 +376,128 @@ class AgentPOService:
         :param id: The ID of the agent to delete.
         :return: True if deletion was successful, False otherwise.
         """
+        print(f"delete agent: {user_id}, {id}")
         table = self.dynamodb.Table(self.dynamodb_table_name)
         response = table.delete_item(Key={'user_id': user_id, 'id': id})
 
         # Check if the item was deleted successfully
         return response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 200
+    
+    def update_agent_sharing(
+        self,
+        user_id: str,
+        agent_id: str,
+        shared_users: Optional[List[str]] = None,
+        shared_groups: Optional[List[str]] = None,
+        is_public: Optional[bool] = None,
+    ) -> tuple[bool, str]:
+        """
+        Update agent sharing settings.
+
+        :param user_id: The user ID who owns the agent.
+        :param agent_id: The ID of the agent to update.
+        :param shared_users: List of user IDs to share with.
+        :param shared_groups: List of group IDs to share with.
+        :param is_public: Whether the agent should be public.
+        :return: Tuple of (success, error_message).
+        """
+        # Check if user owns the agent
+        agent = self.get_agent(user_id, agent_id)
+        if not agent:
+            return False, "Agent not found or you don't have permission to share it"
+
+        try:
+            table = self.dynamodb.Table(self.dynamodb_table_name)
+
+            update_expression = "SET "
+            expression_values = {}
+
+            if shared_users is not None:
+                update_expression += "shared_users = :shared_users, "
+                expression_values[":shared_users"] = shared_users
+
+            if shared_groups is not None:
+                update_expression += "shared_groups = :shared_groups, "
+                expression_values[":shared_groups"] = shared_groups
+
+            if is_public is not None:
+                update_expression += "is_public = :is_public, "
+                expression_values[":is_public"] = is_public
+
+            # Remove trailing comma and space
+            update_expression = update_expression.rstrip(", ")
+
+            if not expression_values:
+                return True, ""  # Nothing to update
+
+            table.update_item(
+                Key={"user_id": user_id, "id": agent_id},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_values,
+            )
+
+            return True, ""
+
+        except Exception as e:
+            error_msg = f"Error updating agent sharing for {agent_id}: {e}"
+            print(error_msg)
+            return False, error_msg
+
+    def make_agent_public(self, agent_id: str) -> bool:
+        """
+        Make an agent public by finding it across all users and updating its public status.
+        
+        :param agent_id: The ID of the agent to make public.
+        :return: True if successful, False otherwise.
+        """
+        try:
+            table = self.dynamodb.Table(self.dynamodb_table_name)
+            
+            # Scan to find the agent across all users
+            scan_response = table.scan(
+                FilterExpression=Attr('id').eq(agent_id)
+            )
+            
+            items = scan_response.get('Items', [])
+            if not items:
+                return False  # Agent not found
+            
+            agent_item = items[0]
+            agent_user_id = agent_item['user_id']
+            
+            # Update agent to be public
+            table.update_item(
+                Key={'user_id': agent_user_id, 'id': agent_id},
+                UpdateExpression="SET is_public = :is_public",
+                ExpressionAttributeValues={":is_public": True}
+            )
+            
+            return True
+        
+        except Exception as e:
+            print(f"Error making agent {agent_id} public: {e}")
+            return False
+    
+    def get_agent_sharing_info(self, user_id: str, agent_id: str) -> tuple[Optional[dict], str]:
+        """
+        Get sharing information for an agent.
+        
+        :param user_id: The user ID who owns the agent.
+        :param agent_id: The ID of the agent.
+        :return: Tuple of (sharing_info_dict, error_message).
+        """
+        agent = self.get_agent(user_id, agent_id)
+        if not agent:
+            return None, "Agent not found or you don't have permission to view its sharing settings"
+        
+        sharing_info = {
+            "agent_id": agent.id,
+            "shared_users": agent.shared_users or [],
+            "shared_groups": agent.shared_groups or [],
+            "is_public": agent.is_public
+        }
+        
+        return sharing_info, ""
     
     async def stream_chat(self, user_id: str, agent_id: str, user_message: str):
         """
@@ -559,7 +760,11 @@ class AgentPOService:
             sys_prompt=item['sys_prompt'],
             tools=[json_to_agent_tool(json.loads(tool)) for tool in item['tools'] ],
             envs=item.get('envs', ''),
-            extras=item.get('extras')
+            extras=item.get('extras'),
+            shared_users=item.get('shared_users'),
+            shared_groups=item.get('shared_groups'),
+            is_public=item.get('is_public', False),
+            creator=item.get('user_id')  # Use user_id as creator
         )
 
 # Agent Chat Records (扩展支持编排记录)

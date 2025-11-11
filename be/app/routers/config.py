@@ -217,6 +217,16 @@ async def init_default_categories(
         )
         config_service.create_config(model_providers_request)
 
+        # Create user_groups root category
+        user_groups_request = CreateConfigRequest(
+            key="user_groups",
+            value="{}",
+            key_display_name="用户组",
+            type="category",
+            seq_num=2
+        )
+        config_service.create_config(user_groups_request)
+
         providers = ["Bedrock", "OpenAI", "Anthropic", "LiteLLM"]
         for idx, provider in enumerate(providers):
             conf = CreateConfigRequest(

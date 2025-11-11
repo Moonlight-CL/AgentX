@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from typing import List
 from ..user.models import User, UserCreate, UserLogin, UserUpdate, UserService
 from ..user.auth import JWTAuth, get_current_user, AuthMiddleware
+from ..config.config import ConfigService
 
 router = APIRouter(
     prefix="/user",
@@ -11,6 +12,7 @@ router = APIRouter(
 )
 
 user_service = UserService()
+config_service = ConfigService()
 
 @router.post("/register")
 async def register_user(user_data: UserCreate) -> JSONResponse:
@@ -221,6 +223,8 @@ async def list_users(
             "username": user.username,
             "email": user.email,
             "status": user.status.value,
+            "is_admin": user.is_admin,
+            "user_groups": user.user_groups or [],
             "created_at": user.created_at,
             "updated_at": user.updated_at,
             "last_login": user.last_login
@@ -327,3 +331,212 @@ async def delete_user_by_id(
             "message": "User deleted successfully"
         }
     )
+
+# User group management endpoints (admin only)
+@router.get("/groups/list")
+async def list_user_groups(
+    current_user: dict = Depends(AuthMiddleware.require_admin)
+) -> JSONResponse:
+    """
+    List all user groups (admin only).
+    
+    :param current_user: Current admin user.
+    :return: List of user groups.
+    """
+    try:
+        groups = config_service.list_configs_by_parent("user_groups")
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "User groups retrieved successfully",
+                "data": [
+                    {
+                        "id": group.key,
+                        "name": group.key_display_name or group.key,
+                        "description": group.value,
+                        "group_key": group.key[4:] if group.key.startswith("ugs_") else group.key  # Remove ugs_ prefix
+                    }
+                    for group in groups
+                ]
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list user groups: {str(e)}")
+
+@router.post("/groups/create")
+async def create_user_group(
+    group_data: dict,
+    current_user: dict = Depends(AuthMiddleware.require_admin)
+) -> JSONResponse:
+    """
+    Create a new user group (admin only).
+    
+    :param group_data: Group creation data with 'name', 'group_key' and optional 'description'.
+    :param current_user: Current admin user.
+    :return: Success message.
+    """
+    try:
+        from ..config.models import CreateConfigRequest
+        import re
+        
+        group_name = group_data.get("name")
+        group_key = group_data.get("group_key")
+        group_description = group_data.get("description", "")
+        
+        if not group_name:
+            raise HTTPException(status_code=400, detail="Group name is required")
+        
+        if not group_key:
+            raise HTTPException(status_code=400, detail="Group key is required")
+        
+        # Validate group key format (only letters, numbers, underscores)
+        if not re.match(r'^[a-zA-Z0-9_]+$', group_key):
+            raise HTTPException(
+                status_code=400, 
+                detail="Group key can only contain letters, numbers, and underscores"
+            )
+        
+        # Add ugs_ prefix to group key
+        full_group_key = f"ugs_{group_key}"
+        
+        # Check if group key already exists
+        existing_config = config_service.get_config(full_group_key)
+        if existing_config:
+            raise HTTPException(status_code=400, detail="Group key already exists")
+        
+        # Create group configuration
+        group_request = CreateConfigRequest(
+            key=full_group_key,
+            value=group_description,
+            key_display_name=group_name,
+            type="item",
+            parent="user_groups"
+        )
+        
+        config = config_service.create_config(group_request)
+        
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "User group created successfully",
+                "data": {
+                    "id": config.key,
+                    "name": config.key_display_name,
+                    "description": config.value,
+                    "group_key": group_key  # Return the key without prefix for display
+                }
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create user group: {str(e)}")
+
+@router.put("/groups/{group_id}")
+async def update_user_group(
+    group_id: str,
+    group_data: dict,
+    current_user: dict = Depends(AuthMiddleware.require_admin)
+) -> JSONResponse:
+    """
+    Update a user group (admin only).
+    
+    :param group_id: Group ID to update.
+    :param group_data: Group update data.
+    :param current_user: Current admin user.
+    :return: Success message.
+    """
+    try:
+        from ..config.models import UpdateConfigRequest
+        
+        update_request = UpdateConfigRequest(
+            value=group_data.get("description"),
+            key_display_name=group_data.get("name")
+        )
+        
+        config = config_service.update_config(group_id, update_request)
+        if not config:
+            raise HTTPException(status_code=404, detail="User group not found")
+        
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "User group updated successfully",
+                "data": {
+                    "id": config.key,
+                    "name": config.key_display_name,
+                    "description": config.value
+                }
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update user group: {str(e)}")
+
+@router.delete("/groups/{group_id}")
+async def delete_user_group(
+    group_id: str,
+    current_user: dict = Depends(AuthMiddleware.require_admin)
+) -> JSONResponse:
+    """
+    Delete a user group (admin only).
+    
+    :param group_id: Group ID to delete.
+    :param current_user: Current admin user.
+    :return: Success message.
+    """
+    try:
+        success = config_service.delete_config(group_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="User group not found")
+        
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "User group deleted successfully"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete user group: {str(e)}")
+
+@router.post("/{user_id}/groups")
+async def assign_user_to_groups(
+    user_id: str,
+    group_data: dict,
+    current_user: dict = Depends(AuthMiddleware.require_admin)
+) -> JSONResponse:
+    """
+    Assign user to groups (admin only).
+    
+    :param user_id: User ID to assign groups to.
+    :param group_data: Dictionary with 'group_ids' list.
+    :param current_user: Current admin user.
+    :return: Success message.
+    """
+    try:
+        group_ids = group_data.get("group_ids", [])
+        
+        user_update = UserUpdate(user_groups=group_ids)
+        updated_user = user_service.update_user(user_id, user_update)
+        
+        if not updated_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "User groups updated successfully",
+                "data": {
+                    "user_id": updated_user.user_id,
+                    "username": updated_user.username,
+                    "user_groups": updated_user.user_groups or []
+                }
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to assign user to groups: {str(e)}")
