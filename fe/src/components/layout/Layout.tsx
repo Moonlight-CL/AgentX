@@ -19,6 +19,7 @@ import { Schedule } from '../schedule';
 import { Config } from '../config/Config';
 import { OrchestrationEditor } from '../orchestration';
 import { UseCase } from '../usecase';
+import { UserManagement } from '../user';
 import { Login, Register, ProtectedRoute } from '../auth';
 import { useUserStore } from '../../store/userStore';
 import { useUseCaseStore } from '../../store/useCaseStore';
@@ -51,7 +52,6 @@ const LayoutContent: React.FC = () => {
 
   // Handle use case menu click
   const handleUseCaseMenuClick = (key: string, keyPath: string[]) => {
-    console.log(keyPath);
     if (keyPath.length === 1) {
       // Primary menu clicked
       setSelectedPrimaryCategory(key);
@@ -82,6 +82,8 @@ const LayoutContent: React.FC = () => {
       setSelectedKey('3');
     } else if (path.includes('/schedule')) {
       setSelectedKey('4');
+    } else if (path.includes('/user-management')) {
+      setSelectedKey('6');
     } else if (path.includes('/config')) {
       setSelectedKey('5');
     }
@@ -123,7 +125,8 @@ const LayoutContent: React.FC = () => {
     }))
   }));
 
-  const menuItems = [
+  // Create menu items with conditional admin items
+  const baseMenuItems = [
     // Use case menu items (above Agent Chatbot)
     ...useCaseMenuItems,
     {
@@ -149,12 +152,32 @@ const LayoutContent: React.FC = () => {
       icon: <ScheduleOutlined />,
       label: <Link to="/schedule">Agent 调度</Link>,
     },
+  ];
+
+  // Add admin-only menu items
+  const adminMenuItems = user?.is_admin ? [
+    {
+      type: 'divider' as const,
+    },
+    {
+      key: '6',
+      icon: <UserOutlined />,
+      label: <Link to="/user-management">用户管理</Link>,
+    },
     {
       key: '5',
       icon: <ControlOutlined />,
       label: <Link to="/config">系统配置</Link>,
     },
+  ] : [
+    // {
+    //   key: '5',
+    //   icon: <ControlOutlined />,
+    //   label: <Link to="/config">系统配置</Link>,
+    // },
   ];
+
+  const menuItems = [...baseMenuItems, ...adminMenuItems];
 
   return (
     <ProtectedRoute>
@@ -188,7 +211,7 @@ const LayoutContent: React.FC = () => {
             mode="inline"
             selectedKeys={[selectedKey]}
             items={menuItems}
-            defaultOpenKeys={["usecase-use_cases"]}
+            // defaultOpenKeys={["usecase-use_cases"]}
             onClick={e => {
               setSelectedKey(e.key);
               // Clear use case selection when clicking non-use case menu items
@@ -245,6 +268,7 @@ const LayoutContent: React.FC = () => {
             <Route path="/mcp" element={<MCP />} />
             <Route path="/schedule" element={<Schedule />} />
             <Route path="/config" element={<Config />} />
+            <Route path="/user-management" element={<UserManagement />} />
             <Route path="/orchestration" element={<AgentHub />} />
             <Route path="/orchestration/create" element={<OrchestrationEditor />} />
             <Route path="/orchestration/edit/:id" element={<OrchestrationEditor />} />

@@ -24,6 +24,7 @@ class ChatRequestData:
     user_id: str
     file_attachments: Optional[List[Dict]]
     use_s3_reference: bool
+    agent_owner_id: Optional[str]  # Owner ID for shared agents
 
 agent_service = AgentPOService()
 chat_reccord_service = ChatRecordService()
@@ -41,7 +42,8 @@ def list_agents(current_user: dict = Depends(get_current_user)) -> List[AgentPO]
     :return: A list of agents.
     """
     user_id = current_user.get('user_id', 'public')
-    return agent_service.list_agents(user_id)
+    user_groups = current_user.get('user_groups', [])
+    return agent_service.list_agents(user_id, user_groups)
 
 @router.get("/get/{agent_id}")
 def get_agent(agent_id: str, current_user: dict = Depends(get_current_user)) -> AgentPO:
@@ -114,6 +116,7 @@ async def parse_chat_request_and_add_record(request: Request) -> ChatRequestData
     chat_record_id = data.get("chat_record_id")  # New parameter for continuing conversation
     chat_record_enabled = data.get("chat_record_enabled", True)  # Default to True if not provided
     use_s3_reference = data.get("use_s3_reference", False)  # Default to False (existing behavior)
+    agent_owner_id = data.get("agent_owner_id")  # Owner ID for shared agents
     
     # Get current user from request state (set by AuthMiddleware)
     current_user = getattr(request.state, 'current_user', None)
@@ -160,10 +163,11 @@ async def parse_chat_request_and_add_record(request: Request) -> ChatRequestData
         chat_record_enabled=chat_record_enabled,
         user_id=user_id,
         file_attachments=file_attachments,
-        use_s3_reference=use_s3_reference
+        use_s3_reference=use_s3_reference,
+        agent_owner_id=agent_owner_id
     )
 
-async def process_chat_events_with_session(user_id: str, agent_id: str, user_input: str, chat_id: str, file_attachments: Optional[List[Dict]] = None, chat_record_enabled: bool = True, use_s3_reference: bool = False) -> AsyncGenerator[Dict, None]:
+async def process_chat_events_with_session(user_id: str, agent_id: str, user_input: str, chat_id: str, file_attachments: Optional[List[Dict]] = None, chat_record_enabled: bool = True, use_s3_reference: bool = False, agent_owner_id: Optional[str] = None) -> AsyncGenerator[Dict, None]:
     """
     Process chat events using session management. Chat content is automatically stored in ChatSessionTable via DynamoDBSessionRepository.
     
@@ -174,9 +178,12 @@ async def process_chat_events_with_session(user_id: str, agent_id: str, user_inp
     :param file_attachments: List of file attachment info from S3.
     :param chat_record_enabled: Whether chat recording is enabled (for compatibility).
     :param use_s3_reference: Whether to use S3 references instead of binary content.
+    :param agent_owner_id: The owner ID for shared agents.
     :yield: Chat events.
     """
-    agent = agent_service.get_agent(user_id, agent_id)
+    # Use agent_owner_id if provided (for shared agents), otherwise use current user_id
+    lookup_user_id = agent_owner_id if agent_owner_id else user_id
+    agent = agent_service.get_agent(lookup_user_id, agent_id)
     if not agent:
         raise ValueError(f"Agent with ID {agent_id} not found.")
     
@@ -247,7 +254,8 @@ async def stream_chat(request: Request) -> StreamingResponse:
             chat_data.chat_id, 
             chat_data.file_attachments, 
             chat_data.chat_record_enabled, 
-            chat_data.use_s3_reference
+            chat_data.use_s3_reference,
+            chat_data.agent_owner_id
         ):
             # Format the event as an SSE
             yield EventSerializer.format_as_sse(event)
@@ -351,3 +359,126 @@ def available_agent_tools(current_user: dict = Depends(get_current_user)) -> Lis
     """
     user_id = current_user.get('user_id', 'public')
     return agent_service.get_all_available_tools(user_id)
+
+# Agent sharing endpoints
+@router.post("/{agent_id}/share")
+async def share_agent(
+    agent_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
+    """
+    Share an agent with specific users or groups.
+    
+    :param agent_id: The ID of the agent to share.
+    :param request: Request containing sharing data.
+    :param current_user: Current user from JWT token.
+    :return: Success message.
+    """
+    user_id = current_user.get('user_id')
+    
+    # Parse sharing data
+    data = await request.json()
+    is_public = data.get("is_public", False)
+    
+    # Apply business logic based on is_public setting
+    if is_public:
+        # When public, clear shared_users and shared_groups
+        shared_users = []
+        shared_groups = []
+    else:
+        # When not public, use the provided values
+        shared_users = data.get("shared_users", [])
+        shared_groups = data.get("shared_groups", [])
+    
+    # Update agent sharing settings using service method
+    success, error_msg = agent_service.update_agent_sharing(
+        user_id=user_id,
+        agent_id=agent_id,
+        shared_users=shared_users,
+        shared_groups=shared_groups,
+        is_public=is_public
+    )
+    
+    if success:
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Agent sharing settings updated successfully"
+            }
+        )
+    else:
+        status_code = 404 if "not found" in error_msg.lower() or "permission" in error_msg.lower() else 500
+        return JSONResponse(
+            status_code=status_code,
+            content={"error": error_msg}
+        )
+
+@router.get("/{agent_id}/sharing")
+def get_agent_sharing(
+    agent_id: str,
+    current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
+    """
+    Get sharing settings for an agent.
+    
+    :param agent_id: The ID of the agent.
+    :param current_user: Current user from JWT token.
+    :return: Agent sharing settings.
+    """
+    user_id = current_user.get('user_id')
+    
+    # Get sharing info using service method
+    sharing_info, error_msg = agent_service.get_agent_sharing_info(user_id, agent_id)
+    
+    if sharing_info:
+        return JSONResponse(
+            content={
+                "success": True,
+                "data": sharing_info
+            }
+        )
+    else:
+        return JSONResponse(
+            status_code=404,
+            content={"error": error_msg}
+        )
+
+@router.post("/{agent_id}/make-public")
+async def make_agent_public(
+    agent_id: str,
+    current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
+    """
+    Make an agent public (admin only).
+    
+    :param agent_id: The ID of the agent to make public.
+    :param current_user: Current user from JWT token.
+    :return: Success message.
+    """
+    from ..user.auth import AuthMiddleware
+    
+    # Check admin privileges
+    try:
+        AuthMiddleware.require_admin(current_user)
+    except Exception:
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Admin privileges required"}
+        )
+    
+    # Make agent public using service method
+    success = agent_service.make_agent_public(agent_id)
+    
+    if success:
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Agent has been made public successfully"
+            }
+        )
+    else:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Agent not found or failed to make public"}
+        )

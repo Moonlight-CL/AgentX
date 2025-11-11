@@ -54,7 +54,8 @@ export const useAgent = () => {
         chatRecordEnabled,
         currentChatId || undefined,  // Pass current chat ID for session continuation
         info.message.fileattachments,  // Pass file attachments
-        info.message.useS3Reference  // Pass S3 reference flag
+        info.message.useS3Reference,  // Pass S3 reference flag
+        currentSelectedAgent.creator  // Pass agent owner ID for shared agents
       );
       
       if (!response.ok) {

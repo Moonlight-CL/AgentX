@@ -93,7 +93,9 @@ class JWTAuth:
             "user_id": user.user_id,
             "username": user.username,
             "email": user.email,
-            "status": user.status.value
+            "status": user.status.value,
+            "is_admin": user.is_admin,
+            "user_groups": user.user_groups or []
         }
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
@@ -148,12 +150,14 @@ class AuthMiddleware:
     def require_admin(user: dict = Depends(get_current_user)) -> dict:
         """
         Require admin privileges for a route.
-        Note: This is a placeholder - you can extend User model to include roles.
         
         :param user: Current user from dependency.
         :return: Current user information.
         :raises HTTPException: If user is not admin.
         """
-        # For now, we'll just return the user
-        # You can extend this to check for admin role in the future
+        if not user.get("is_admin", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin privileges required"
+            )
         return user

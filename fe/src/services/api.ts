@@ -158,6 +158,10 @@ export interface Agent {
   };
   created_at?: string;
   updated_at?: string;
+  shared_users?: string[];
+  shared_groups?: string[];
+  is_public?: boolean;
+  creator?: string; // User ID of the agent creator
 }
 
 // Interface for MCP Server
@@ -275,10 +279,10 @@ export interface OrchestrationConfig {
   type: string; // 'swarm', 'graph', 'workflow', 'agent_as_tool'
   nodes: OrchestrationNode[];
   edges: OrchestrationEdge[];
-  
+
   // Common configuration
   executionTimeout?: number;
-  
+
   // Swarm-specific configuration
   entryPoint?: string;
   maxHandoffs?: number;
@@ -286,19 +290,19 @@ export interface OrchestrationConfig {
   nodeTimeout?: number;
   repetitiveHandoffDetectionWindow?: number;
   repetitiveHandoffMinUniqueAgents?: number;
-  
+
   // Graph-specific configuration
   maxNodeExecutions?: number;
   resetOnRevisit?: boolean;
-  
+
   // Workflow-specific configuration
   parallelExecution?: boolean;
   taskPriorities?: Record<string, number>;
-  
+
   // Agent as Tool-specific configuration
   orchestratorAgent?: string;
   toolAgents?: string[];
-  
+
   // Additional metadata
   userId?: string;
   createdAt?: string;
@@ -556,7 +560,7 @@ export interface AuthResponse {
 // Create axios instance with interceptors for authentication
 const createAuthenticatedAxios = () => {
   const instance = axios.create();
-  
+
   // Request interceptor to add auth token
   instance.interceptors.request.use(
     (config) => {
@@ -577,7 +581,7 @@ const createAuthenticatedAxios = () => {
       return Promise.reject(error);
     }
   );
-  
+
   // Response interceptor to handle auth errors
   instance.interceptors.response.use(
     (response) => response,
@@ -591,7 +595,7 @@ const createAuthenticatedAxios = () => {
       return Promise.reject(error);
     }
   );
-  
+
   return instance;
 };
 
@@ -602,7 +606,7 @@ const authAxios = createAuthenticatedAxios();
 const createAuthenticatedAPI = () => {
   // Override the default axios instance for all API calls
   const originalAxios = axios.create();
-  
+
   // Add the same interceptors to the original axios instance
   originalAxios.interceptors.request.use(
     (config) => {
@@ -621,7 +625,7 @@ const createAuthenticatedAPI = () => {
     },
     (error) => Promise.reject(error)
   );
-  
+
   originalAxios.interceptors.response.use(
     (response) => response,
     (error) => {
@@ -632,7 +636,7 @@ const createAuthenticatedAPI = () => {
       return Promise.reject(error);
     }
   );
-  
+
   return originalAxios;
 };
 
@@ -650,7 +654,7 @@ export const userAPI = {
       throw new Error(error.response?.data?.detail || 'Registration failed');
     }
   },
-  
+
   // Login user
   login: async (loginData: UserLogin): Promise<AuthResponse> => {
     try {
@@ -660,7 +664,7 @@ export const userAPI = {
       throw new Error(error.response?.data?.detail || 'Login failed');
     }
   },
-  
+
   // Logout user
   logout: async (): Promise<{ message: string }> => {
     try {
@@ -670,7 +674,7 @@ export const userAPI = {
       throw new Error(error.response?.data?.detail || 'Logout failed');
     }
   },
-  
+
   // Get current user info
   getCurrentUser: async (): Promise<{ user: UserInfo }> => {
     try {
@@ -680,7 +684,7 @@ export const userAPI = {
       throw new Error(error.response?.data?.detail || 'Failed to get user info');
     }
   },
-  
+
   // Update current user
   updateCurrentUser: async (userData: { email?: string; status?: string }): Promise<{ message: string; user: UserInfo }> => {
     try {
@@ -690,7 +694,7 @@ export const userAPI = {
       throw new Error(error.response?.data?.detail || 'Failed to update user');
     }
   },
-  
+
   // Change password
   changePassword: async (passwordData: { old_password: string; new_password: string }): Promise<{ message: string }> => {
     try {
@@ -700,7 +704,7 @@ export const userAPI = {
       throw new Error(error.response?.data?.detail || 'Failed to change password');
     }
   },
-  
+
   // Verify token
   verifyToken: async (): Promise<{ valid: boolean; user: UserInfo }> => {
     try {
@@ -710,7 +714,7 @@ export const userAPI = {
       throw new Error(error.response?.data?.detail || 'Token verification failed');
     }
   },
-  
+
   // Admin functions
   listUsers: async (limit: number = 100): Promise<UserInfo[]> => {
     try {
@@ -720,7 +724,7 @@ export const userAPI = {
       throw new Error(error.response?.data?.detail || 'Failed to list users');
     }
   },
-  
+
   getUserById: async (userId: string): Promise<{ user: UserInfo }> => {
     try {
       const response = await authAxios.get(USER_API.get(userId));
@@ -729,7 +733,7 @@ export const userAPI = {
       throw new Error(error.response?.data?.detail || 'Failed to get user');
     }
   },
-  
+
   updateUserById: async (userId: string, userData: { email?: string; status?: string }): Promise<{ message: string; user: UserInfo }> => {
     try {
       const response = await authAxios.put(USER_API.update(userId), userData);
@@ -738,7 +742,7 @@ export const userAPI = {
       throw new Error(error.response?.data?.detail || 'Failed to update user');
     }
   },
-  
+
   deleteUserById: async (userId: string): Promise<{ message: string }> => {
     try {
       const response = await authAxios.delete(USER_API.delete(userId));
@@ -746,6 +750,52 @@ export const userAPI = {
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || 'Failed to delete user');
     }
+  },
+
+  // User management methods (aliases for consistency)
+  listUserGroups: async (): Promise<{ success: boolean; data: Array<{ id: string; name: string; description: string }> }> => {
+    try {
+      const response = await authAxios.get(`${BASE_URL}/user/groups/list`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to list user groups');
+    }
+  },
+
+  createUserGroup: async (groupData: { name: string; group_key: string; description?: string }): Promise<{ success: boolean; data: { id: string; name: string; description: string; group_key: string } }> => {
+    try {
+      const response = await authAxios.post(`${BASE_URL}/user/groups/create`, groupData);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to create user group');
+    }
+  },
+
+  updateUserGroup: async (groupId: string, groupData: { name?: string; description?: string }): Promise<{ success: boolean; data: { id: string; name: string; description: string } }> => {
+    try {
+      const response = await authAxios.put(`${BASE_URL}/user/groups/${groupId}`, groupData);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to update user group');
+    }
+  },
+
+  deleteUserGroup: async (groupId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const response = await authAxios.delete(`${BASE_URL}/user/groups/${groupId}`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Failed to delete user group');
+    }
+  },
+
+  // Alias methods for consistency with UserManagement component
+  deleteUser: async (userId: string): Promise<{ message: string }> => {
+    return userAPI.deleteUserById(userId);
+  },
+
+  updateUser: async (userId: string, userData: any): Promise<{ message: string; user: UserInfo }> => {
+    return userAPI.updateUserById(userId, userData);
   }
 };
 
@@ -763,7 +813,7 @@ export const mcpAPI = {
       return mockMCPServers;
     }
   },
-  
+
   // Get a specific MCP server
   getMCPServer: async (id: string): Promise<MCPServer | null> => {
     try {
@@ -776,7 +826,7 @@ export const mcpAPI = {
       return mockMCPServers.find(server => server.id === id) || null;
     }
   },
-  
+
   // Create or update an MCP server
   createOrUpdateMCPServer: async (server: Partial<MCPServer>): Promise<MCPServer> => {
     try {
@@ -784,10 +834,10 @@ export const mcpAPI = {
       return response.data;
     } catch (error) {
       console.error('Error creating/updating MCP server:', error);
-      
+
       // Fallback to mock data if API call fails
       console.warn('Falling back to mock data');
-      
+
       if (server.id) {
         // Update existing server in mock data
         const updatedServer: MCPServer = {
@@ -805,7 +855,7 @@ export const mcpAPI = {
       }
     }
   },
-  
+
   // Delete an MCP server
   deleteMCPServer: async (id: string): Promise<boolean> => {
     try {
@@ -831,7 +881,7 @@ export const configAPI = {
       throw new Error('Failed to fetch category tree');
     }
   },
-  
+
   // Get configs by parent
   getConfigsByParent: async (parent: string): Promise<ConfigListResponse> => {
     try {
@@ -842,7 +892,7 @@ export const configAPI = {
       throw new Error('Failed to fetch configs');
     }
   },
-  
+
   // Get all configs
   getAllConfigs: async (): Promise<ConfigListResponse> => {
     try {
@@ -853,7 +903,7 @@ export const configAPI = {
       throw new Error('Failed to fetch configs');
     }
   },
-  
+
   // Get specific config
   getConfig: async (key: string): Promise<ConfigResponse> => {
     try {
@@ -864,7 +914,7 @@ export const configAPI = {
       throw new Error('Failed to fetch config');
     }
   },
-  
+
   // Create config
   createConfig: async (config: CreateConfigRequest): Promise<ConfigResponse> => {
     try {
@@ -875,7 +925,7 @@ export const configAPI = {
       throw new Error('Failed to create config');
     }
   },
-  
+
   // Update config
   updateConfig: async (key: string, config: UpdateConfigRequest): Promise<ConfigResponse> => {
     try {
@@ -886,7 +936,7 @@ export const configAPI = {
       throw new Error('Failed to update config');
     }
   },
-  
+
   // Delete config
   deleteConfig: async (key: string): Promise<{ success: boolean; message: string }> => {
     try {
@@ -897,7 +947,7 @@ export const configAPI = {
       throw new Error('Failed to delete config');
     }
   },
-  
+
   // Get root categories
   getRootCategories: async (): Promise<ConfigListResponse> => {
     try {
@@ -908,7 +958,7 @@ export const configAPI = {
       throw new Error('Failed to fetch root categories');
     }
   },
-  
+
   // Create model provider
   createModelProvider: async (provider: ModelProviderRequest): Promise<ConfigResponse> => {
     try {
@@ -919,7 +969,7 @@ export const configAPI = {
       throw new Error('Failed to create model provider');
     }
   },
-  
+
   // Initialize default categories
   initDefaultCategories: async (): Promise<{ success: boolean; message: string }> => {
     try {
@@ -943,7 +993,7 @@ export const chatAPI = {
       return [];
     }
   },
-  
+
   // Get chat responses for a specific chat
   getChatResponses: async (chatId: string): Promise<ChatResponse[]> => {
     try {
@@ -958,7 +1008,7 @@ export const chatAPI = {
   deleteChat: async (chatId: string): Promise<{ success: boolean; message: string }> => {
     try {
       const response = await apiAxios.delete(CHAT_API.deleteChat(chatId));
-      
+
       // Check if the response contains a success message
       if (response.data && response.data.message) {
         return { success: true, message: response.data.message };
@@ -973,13 +1023,13 @@ export const chatAPI = {
       }
     } catch (error: any) {
       console.error(`Error deleting chat with ID ${chatId}:`, error);
-      
+
       // Try to extract error message from response
-      const errorMessage = error.response?.data?.error || 
-                          error.response?.data?.detail || 
-                          error.message || 
-                          'Failed to delete chat';
-      
+      const errorMessage = error.response?.data?.error ||
+        error.response?.data?.detail ||
+        error.message ||
+        'Failed to delete chat';
+
       return { success: false, message: errorMessage };
     }
   }
@@ -998,7 +1048,7 @@ export const scheduleAPI = {
       return mockSchedules;
     }
   },
-  
+
   // Create a new schedule
   createSchedule: async (schedule: { agentId: string; cronExpression: string; user_message?: string }): Promise<Schedule> => {
     try {
@@ -1006,13 +1056,13 @@ export const scheduleAPI = {
       return response.data;
     } catch (error) {
       console.error('Error creating schedule:', error);
-      
+
       // Fallback to mock data if API call fails
       console.warn('Falling back to mock data');
-      
+
       // Find the agent to get its name
       const agent = mockAgents.find(a => a.id === schedule.agentId);
-      
+
       // Create a new schedule in mock data
       const newSchedule: Schedule = {
         id: Math.random().toString(36).substring(2, 9),
@@ -1023,11 +1073,11 @@ export const scheduleAPI = {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      
+
       return newSchedule;
     }
   },
-  
+
   // Update an existing schedule
   updateSchedule: async (schedule: Schedule): Promise<Schedule> => {
     try {
@@ -1035,20 +1085,20 @@ export const scheduleAPI = {
       return response.data;
     } catch (error) {
       console.error('Error updating schedule:', error);
-      
+
       // Fallback to mock data if API call fails
       console.warn('Falling back to mock behavior');
-      
+
       // Update the schedule's updatedAt timestamp
       const updatedSchedule: Schedule = {
         ...schedule,
         updatedAt: new Date().toISOString(),
       };
-      
+
       return updatedSchedule;
     }
   },
-  
+
   // Delete a schedule
   deleteSchedule: async (id: string): Promise<boolean> => {
     try {
@@ -1076,7 +1126,7 @@ export const agentAPI = {
       return mockAgents;
     }
   },
-  
+
   // Create or update an agent
   createOrUpdateAgent: async (agent: Partial<Agent>): Promise<Agent> => {
     try {
@@ -1084,10 +1134,10 @@ export const agentAPI = {
       return response.data;
     } catch (error) {
       console.error('Error creating/updating agent:', error);
-      
+
       // Fallback to mock data if API call fails
       console.warn('Falling back to mock data');
-      
+
       if (agent.id) {
         // Update existing agent in mock data
         const updatedAgent: Agent = {
@@ -1108,7 +1158,7 @@ export const agentAPI = {
       }
     }
   },
-  
+
   // Get list of available tools
   getTools: async (): Promise<Tool[]> => {
     try {
@@ -1133,9 +1183,9 @@ export const agentAPI = {
       return true;
     }
   },
-  
+
   // Stream chat with an agent
-  streamChat: (agentId: string, userMessage: string, chatRecordEnabled: boolean = true, chatRecordId?: string, fileAttachments?: any[], useS3Reference?: boolean): Promise<Response> => {
+  streamChat: (agentId: string, userMessage: string, chatRecordEnabled: boolean = true, chatRecordId?: string, fileAttachments?: any[], useS3Reference?: boolean, agentOwnerId?: string): Promise<Response> => {
     // Get token for SSE request
     const token = localStorage.getItem('user-storage');
     // console.log('Retrieved token from localStorage:', token);
@@ -1150,29 +1200,34 @@ export const agentAPI = {
         console.error('Error parsing stored token:', error);
       }
     }
-    
+
     // Prepare request body
     const requestBody: any = {
       agent_id: agentId,
       user_message: userMessage,
       chat_record_enabled: chatRecordEnabled
     };
-    
+
+    // Add agent_owner_id if provided (for shared agents)
+    if (agentOwnerId) {
+      requestBody.agent_owner_id = agentOwnerId;
+    }
+
     // Add chat_record_id if provided for continuing conversation
     if (chatRecordId) {
       requestBody.chat_record_id = chatRecordId;
     }
-    
+
     // Add file attachments if provided
     if (fileAttachments && fileAttachments.length > 0) {
       requestBody.file_attachments = fileAttachments;
     }
-    
+
     // Add useS3Reference flag if provided
     if (useS3Reference !== undefined) {
       requestBody.use_s3_reference = useS3Reference;
     }
-    
+
     // Use fetch API to make a POST request with proper headers for SSE
     return fetch(AGENT_API.streamChat, {
       method: 'POST',
@@ -1194,7 +1249,7 @@ export const fileAPI = {
       files.forEach(file => {
         formData.append('files', file);
       });
-      
+
       const response = await apiAxios.post(FILE_API.upload, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -1210,7 +1265,7 @@ export const fileAPI = {
       }
     }
   },
-  
+
   // Download a file using POST request to avoid URL encoding issues
   downloadFile: async (s3Key: string): Promise<Blob> => {
     try {
@@ -1225,7 +1280,7 @@ export const fileAPI = {
       throw new Error('Failed to download file');
     }
   },
-  
+
   // Delete a file
   deleteFile: async (fileId: string): Promise<boolean> => {
     try {
@@ -1236,7 +1291,7 @@ export const fileAPI = {
       throw new Error('Failed to delete file');
     }
   },
-  
+
   // Get file info
   getFileInfo: async (fileId: string): Promise<any> => {
     try {
@@ -1247,7 +1302,7 @@ export const fileAPI = {
       throw new Error('Failed to get file info');
     }
   },
-  
+
   // Generate download URL for S3 key
   getDownloadUrl: (s3Key: string): string => {
     return FILE_API.download(s3Key);
@@ -1265,7 +1320,7 @@ export const orchestrationAPI = {
       throw new Error('Failed to fetch orchestrations');
     }
   },
-  
+
   // Get a specific orchestration
   getOrchestration: async (id: string): Promise<OrchestrationConfig> => {
     try {
@@ -1276,7 +1331,7 @@ export const orchestrationAPI = {
       throw new Error('Failed to fetch orchestration');
     }
   },
-  
+
   // Create a new orchestration
   createOrchestration: async (config: Partial<OrchestrationConfig>): Promise<OrchestrationConfig> => {
     try {
@@ -1287,7 +1342,7 @@ export const orchestrationAPI = {
       throw new Error('Failed to create orchestration');
     }
   },
-  
+
   // Update an existing orchestration
   updateOrchestration: async (id: string, config: Partial<OrchestrationConfig>): Promise<OrchestrationConfig> => {
     try {
@@ -1298,7 +1353,7 @@ export const orchestrationAPI = {
       throw new Error('Failed to update orchestration');
     }
   },
-  
+
   // Delete an orchestration
   deleteOrchestration: async (id: string): Promise<boolean> => {
     try {
@@ -1309,7 +1364,7 @@ export const orchestrationAPI = {
       throw new Error('Failed to delete orchestration');
     }
   },
-  
+
   // Execute an orchestration
   executeOrchestration: async (id: string, request: ExecutionRequest): Promise<ExecutionResponse> => {
     try {
@@ -1320,7 +1375,7 @@ export const orchestrationAPI = {
       throw new Error('Failed to execute orchestration');
     }
   },
-  
+
   // Get execution status
   getExecutionStatus: async (executionId: string): Promise<OrchestrationExecution> => {
     try {
@@ -1331,7 +1386,7 @@ export const orchestrationAPI = {
       throw new Error('Failed to get execution status');
     }
   },
-  
+
   // Stop execution
   stopExecution: async (executionId: string): Promise<boolean> => {
     try {
@@ -1342,11 +1397,11 @@ export const orchestrationAPI = {
       throw new Error('Failed to stop execution');
     }
   },
-  
+
   // List executions
   listExecutions: async (orchestrationId?: string): Promise<OrchestrationExecution[]> => {
     try {
-      const url = orchestrationId 
+      const url = orchestrationId
         ? `/orchestration/executions?orchestrationId=${orchestrationId}`
         : '/orchestration/executions';
       const response = await apiAxios.get(url);

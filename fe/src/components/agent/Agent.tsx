@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Card, 
   Typography, 
@@ -9,19 +9,22 @@ import {
   Form, 
   Input, 
   Select, 
-  Tooltip
+  Tooltip,
+  message,
 } from 'antd';
 import type { FormInstance } from 'antd/es/form';
 import { 
   PlusOutlined, 
   EyeOutlined, 
   EditOutlined, 
-  DeleteOutlined
+  DeleteOutlined,
+  ShareAltOutlined
 } from '@ant-design/icons';
 import { AGENT_TYPES, TOOL_TYPES } from '../../services/api';
 import type { Agent, Tool } from '../../services/api';
 import { useAgentStore } from '../../store/agentStore';
 import { useModelProviders } from '../../hooks/useModelProviders';
+import { useUserStore } from '../../store/userStore';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -31,6 +34,13 @@ export const AgentManager: React.FC = () => {
   // Form instances - initialized with default values
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
+  const [shareForm] = Form.useForm();
+  
+  // Share modal state
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+  const [userGroups, setUserGroups] = useState<any[]>([]);
+  const [shareLoading, setShareLoading] = useState(false);
   
   // Get model providers from configuration
   const { 
@@ -59,6 +69,7 @@ export const AgentManager: React.FC = () => {
     setToolDetailModalVisible,
     setAgentDetailModalVisible,
     setDeleteModalVisible,
+    setSelectedAgent,
     createAgent,
     updateAgent,
     deleteAgent,
@@ -67,6 +78,16 @@ export const AgentManager: React.FC = () => {
     handleEditAgent,
     handleDeleteAgent
   } = useAgentStore();
+  
+  // Get current user from user store
+  const { user } = useUserStore();
+  
+  // Helper function to check if current user can edit/delete/share an agent
+  const canManageAgent = (agent: Agent): boolean => {
+    if (!user) return false;
+    // User can manage agent if they are the creator or user is administrator
+    return agent.creator === user.user_id || user.is_admin === true;
+  };
   
   // Reset form when modal is opened and set initial values
   useEffect(() => {
@@ -202,6 +223,94 @@ export const AgentManager: React.FC = () => {
     return providerInfo?.displayName || providerKey || '未知';
   };
 
+  // Handle share agent
+  const handleShareAgent = async (agent: Agent) => {
+    try {
+      // Set selected agent for sharing
+      setSelectedAgent(agent);
+      
+      // Load users and user groups for sharing
+      setShareLoading(true);
+      
+      // Fetch users and user groups
+      const [usersResponse, groupsResponse] = await Promise.all([
+        fetch('/api/user/list', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('user-storage') ? JSON.parse(localStorage.getItem('user-storage')!).state?.token : ''}`,
+          },
+        }),
+        fetch('/api/user/groups/list', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('user-storage') ? JSON.parse(localStorage.getItem('user-storage')!).state?.token : ''}`,
+          },
+        })
+      ]);
+      
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json();
+        setUsers(usersData);
+      }
+      
+      if (groupsResponse.ok) {
+        const groupsData = await groupsResponse.json();
+        if (groupsData.success) {
+          setUserGroups(groupsData.data);
+        }
+      }
+      
+      // Set current sharing values
+      shareForm.setFieldsValue({
+        shared_users: agent.shared_users || [],
+        shared_groups: agent.shared_groups || [],
+        is_public: agent.is_public || false
+      });
+      
+      setShareModalVisible(true);
+    } catch (error) {
+      message.error('Failed to load sharing data');
+      console.error('Error loading sharing data:', error);
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  // Handle share form submission
+  const handleShareSubmit = async (values: any) => {
+    if (!selectedAgent) return;
+    
+    try {
+      setShareLoading(true);
+      
+      const response = await fetch(`/api/agent/${selectedAgent.id}/share`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('user-storage') ? JSON.parse(localStorage.getItem('user-storage')!).state?.token : ''}`,
+        },
+        body: JSON.stringify({
+          shared_users: values.shared_users || [],
+          shared_groups: values.shared_groups || [],
+          is_public: values.is_public || false
+        })
+      });
+      
+      if (response.ok) {
+        message.success('Agent shared successfully');
+        setShareModalVisible(false);
+        shareForm.resetFields();
+        fetchAgents(); // Refresh agents list
+      } else {
+        const errorData = await response.json();
+        message.error(errorData.detail || 'Failed to share agent');
+      }
+    } catch (error) {
+      message.error('Failed to share agent');
+      console.error('Error sharing agent:', error);
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
 
   // Table columns
   const columns = [
@@ -270,44 +379,63 @@ export const AgentManager: React.FC = () => {
       key: 'actions',
       fixed: 'right' as const,
       width: 120,
-      render: (_: unknown, record: Agent) => (
-        <Space>
-          <Tooltip 
-            title={
-              <div>
-                <p><strong>System Prompt:</strong></p>
-                <div style={{ maxWidth: '300px', maxHeight: '200px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
-                  {record.sys_prompt}
+      render: (_: unknown, record: Agent) => {
+        const canManage = canManageAgent(record);
+        
+        return (
+          <Space>
+            <Tooltip 
+              title={
+                <div>
+                  <p><strong>System Prompt:</strong></p>
+                  <div style={{ maxWidth: '300px', maxHeight: '200px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+                    {record.sys_prompt}
+                  </div>
                 </div>
-              </div>
-            }
-            placement="left"
-            styles={{ root: { maxWidth: '400px' } }}
-            // overlayStyle={{ maxWidth: '400px' }}
-          >
-            <Button 
-              type="text" 
-              icon={<EyeOutlined />} 
-              onClick={() => handleViewAgent(record)} 
-            />
-          </Tooltip>
-          <Tooltip title="编辑">
-            <Button 
-              type="text" 
-              icon={<EditOutlined />} 
-              onClick={() => handleEditAgent(record)} 
-            />
-          </Tooltip>
-          <Tooltip title="删除">
-            <Button 
-              type="text" 
-              danger 
-              icon={<DeleteOutlined />} 
-              onClick={() => handleDeleteAgent(record)} 
-            />
-          </Tooltip>
-        </Space>
-      ),
+              }
+              placement="left"
+              styles={{ root: { maxWidth: '400px' } }}
+            >
+              <Button 
+                type="text" 
+                icon={<EyeOutlined />} 
+                onClick={() => handleViewAgent(record)} 
+              />
+            </Tooltip>
+            
+            {canManage && (
+              <Tooltip title="编辑">
+                <Button 
+                  type="text" 
+                  icon={<EditOutlined />} 
+                  onClick={() => handleEditAgent(record)} 
+                />
+              </Tooltip>
+            )}
+            
+            {canManage && (
+              <Tooltip title="分享">
+                <Button 
+                  type="text" 
+                  icon={<ShareAltOutlined />} 
+                  onClick={() => handleShareAgent(record)} 
+                />
+              </Tooltip>
+            )}
+            
+            {canManage && (
+              <Tooltip title="删除">
+                <Button 
+                  type="text" 
+                  danger 
+                  icon={<DeleteOutlined />} 
+                  onClick={() => handleDeleteAgent(record)} 
+                />
+              </Tooltip>
+            )}
+          </Space>
+        );
+      },
     },
   ];
   
@@ -865,6 +993,99 @@ export const AgentManager: React.FC = () => {
         >
           <p>确定要删除这个 { "[" + selectedAgent?.name + "]"} Agent 吗？</p>
           <p>请注意，删除后无法恢复，请谨慎操作。</p>
+        </Modal>
+
+        {/* Share Agent Modal */}
+        <Modal
+          title={`分享 Agent: ${selectedAgent?.display_name || selectedAgent?.name}`}
+          open={shareModalVisible}
+          onCancel={() => {
+            setShareModalVisible(false);
+            shareForm.resetFields();
+          }}
+          onOk={() => shareForm.submit()}
+          width={600}
+          okText="保存"
+          cancelText="取消"
+          confirmLoading={shareLoading}
+        >
+          <Form
+            form={shareForm}
+            layout="vertical"
+            onFinish={handleShareSubmit}
+            onValuesChange={(changedValues) => {
+              // When is_public changes to true, clear shared_users and shared_groups
+              if (changedValues.is_public === true) {
+                shareForm.setFieldsValue({
+                  shared_users: [],
+                  shared_groups: []
+                });
+              }
+            }}
+          >
+            <Form.Item
+              name="is_public"
+              label="公开访问"
+              valuePropName="checked"
+            >
+              <Select>
+                <Option value={true}>是 - 所有用户都可以使用</Option>
+                <Option value={false}>否 - 仅分享给指定用户/组</Option>
+              </Select>
+            </Form.Item>
+            
+            <Form.Item
+              noStyle
+              shouldUpdate={(prevValues, currentValues) => prevValues.is_public !== currentValues.is_public}
+            >
+              {({ getFieldValue }) => {
+                const isPublic = getFieldValue('is_public');
+                return (
+                  <>
+                    <Form.Item
+                      name="shared_users"
+                      label="分享给用户"
+                      help="选择要分享给的特定用户"
+                    >
+                      <Select
+                        mode="multiple"
+                        placeholder="选择用户"
+                        allowClear
+                        loading={shareLoading}
+                        disabled={isPublic}
+                      >
+                        {users.map(user => (
+                          <Option key={user.user_id} value={user.user_id}>
+                            {user.username} ({user.email || 'No email'})
+                          </Option>
+                        ))}
+                      </Select>
+                    </Form.Item>
+                    
+                    <Form.Item
+                      name="shared_groups"
+                      label="分享给用户组"
+                      help="选择要分享给的用户组"
+                    >
+                      <Select
+                        mode="multiple"
+                        placeholder="选择用户组"
+                        allowClear
+                        loading={shareLoading}
+                        disabled={isPublic}
+                      >
+                        {userGroups.map(group => (
+                          <Option key={group.id} value={group.id}>
+                            {group.name} - {group.description}
+                          </Option>
+                        ))}
+                      </Select>
+                    </Form.Item>
+                  </>
+                );
+              }}
+            </Form.Item>
+          </Form>
         </Modal>
 
       </Card>
