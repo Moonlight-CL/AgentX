@@ -1,0 +1,43 @@
+[project]
+name = "edu-material-gen2"
+version = "0.1.0"
+description = "Educational Material Generation MCP Server"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.13.1",
+    "python-dotenv>=1.1.1",
+    "uvicorn>=0.35.0",
+    "starlette>=0.27.0",
+    "asyncpg>=0.29.0",
+    "pgvector>=0.3.0",
+    "numpy>=1.24.0",
+    "boto3>=1.35.0",
+    "botocore>=1.35.0",
+    "python-docx>=1.1.0",
+]
+[project.scripts]
+edu-material-server = "edu_material_server.server:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["edu_material_server"]
+
+[tool.pyright]
+include = ["edu_material_server"]
+venvPath = "."
+venv = ".venv"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = []
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.uv]
+dev-dependencies = ["pyright>=1.1.378", "pytest>=8.3.3", "ruff>=0.6.9"]
