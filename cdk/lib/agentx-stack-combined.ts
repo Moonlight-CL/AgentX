@@ -76,6 +76,30 @@ export interface AgentXStackProps extends cdk.StackProps {
    * If not provided, defaults to 'agentx/files'.
    */
   s3FilePrefix?: string;
+
+  /**
+   * Azure AD Client ID for SSO authentication.
+   * Optional - if not provided, Azure AD SSO will not be configured.
+   */
+  azureClientId?: string;
+
+  /**
+   * Azure AD Tenant ID for SSO authentication.
+   * Optional - if not provided, Azure AD SSO will not be configured.
+   */
+  azureTenantId?: string;
+
+  /**
+   * Azure AD Client Secret for SSO authentication.
+   * Optional - if not provided, Azure AD SSO will not be configured.
+   */
+  azureClientSecret?: string;
+
+  /**
+   * JWT Secret Key for token generation.
+   * If not provided, a random key will be generated (not recommended for production).
+   */
+  jwtSecretKey?: string;
 }
 
 export class AgentXStack extends cdk.Stack {
@@ -310,6 +334,12 @@ export class AgentXStack extends cdk.Stack {
         BYPASS_TOOL_CONSENT: 'true',
         S3_BUCKET_NAME: s3BucketName,
         S3_FILE_PREFIX: s3FilePrefix,
+        // Azure AD SSO configuration (optional)
+        ...(props?.azureClientId && { AZURE_CLIENT_ID: props.azureClientId }),
+        ...(props?.azureTenantId && { AZURE_TENANT_ID: props.azureTenantId }),
+        ...(props?.azureClientSecret && { AZURE_CLIENT_SECRET: props.azureClientSecret }),
+        // JWT configuration
+        ...(props?.jwtSecretKey && { JWT_SECRET_KEY: props.jwtSecretKey }),
       },
       portMappings: [
         {
@@ -331,6 +361,10 @@ export class AgentXStack extends cdk.Stack {
         // Add environment variables as needed
         NODE_ENV: 'production',
         AWS_REGION: this.region,
+        // Azure AD SSO configuration (optional)
+        ...(props?.azureClientId && { VITE_AZURE_CLIENT_ID: props.azureClientId }),
+        ...(props?.azureTenantId && { VITE_AZURE_TENANT_ID: props.azureTenantId }),
+        ...(props?.azureTenantId && { VITE_AZURE_AUTHORITY: `https://login.microsoftonline.com/${props.azureTenantId}` }),
       },
       portMappings: [
         {

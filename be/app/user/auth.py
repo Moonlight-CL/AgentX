@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from .models import TokenData, UserService
+from .azure_auth import azure_auth
 
 # JWT Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production")
@@ -75,28 +76,61 @@ class JWTAuth:
     @staticmethod
     def get_current_user_from_token(token: str) -> Optional[dict]:
         """
-        Get current user information from JWT token.
+        Get current user information from JWT token (supports both local and Azure AD tokens).
         
         :param token: The JWT token.
         :return: User information dict if valid, None otherwise.
         """
+        # First try local JWT verification
         token_data = JWTAuth.verify_token(token)
-        if not token_data:
-            return None
+        if token_data:
+            # Verify user still exists and is active
+            user = user_service.get_user_by_id(token_data.user_id)
+            if user and user.status.value == "active":
+                return {
+                    "user_id": user.user_id,
+                    "username": user.username,
+                    "email": user.email,
+                    "status": user.status.value,
+                    "is_admin": user.is_admin,
+                    "user_groups": user.user_groups or [],
+                    "auth_provider": user.auth_provider.value,
+                    "display_name": user.display_name
+                }
         
-        # Verify user still exists and is active
-        user = user_service.get_user_by_id(token_data.user_id)
-        if not user or user.status.value != "active":
-            return None
+        # If local JWT fails, try Azure AD JWT verification
+        try:
+            azure_user_info = azure_auth.verify_azure_token(token)
+            if azure_user_info:
+                # Find or create user based on Azure AD info
+                user = user_service.get_user_by_azure_object_id(azure_user_info["azure_object_id"])
+                
+                if not user:
+                    # Create new user from Azure AD info
+                    user = user_service.create_azure_user(azure_user_info)
+                else:
+                    # Update existing user with latest Azure AD info
+                    user = user_service.update_azure_user(user.user_id, azure_user_info)
+                
+                # Update last login
+                user_service.update_last_login(user.user_id)
+                
+                if user and user.status.value == "active":
+                    return {
+                        "user_id": user.user_id,
+                        "username": user.username,
+                        "email": user.email,
+                        "status": user.status.value,
+                        "is_admin": user.is_admin,
+                        "user_groups": user.user_groups or [],
+                        "auth_provider": user.auth_provider.value,
+                        "display_name": user.display_name,
+                        "azure_object_id": user.azure_object_id
+                    }
+        except Exception as e:
+            print(f"Azure AD token verification failed: {e}")
         
-        return {
-            "user_id": user.user_id,
-            "username": user.username,
-            "email": user.email,
-            "status": user.status.value,
-            "is_admin": user.is_admin,
-            "user_groups": user.user_groups or []
-        }
+        return None
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """

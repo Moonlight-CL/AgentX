@@ -176,6 +176,19 @@ cd cdk
   --aws-db-mcp-memory 4096 \
   --s3-bucket-name enterprise-storage \
   --s3-file-prefix agentx/enterprise
+
+# Deployment with Azure AD SSO and existing VPC (no MCP servers)
+./deploy.sh --region us-west-2 \
+  --vpc-id vpc-12345678 \
+  --no-mysql-mcp \
+  --no-redshift-mcp \
+  --no-duckdb-mcp \
+  --no-opensearch-mcp \
+  --no-aws-db-mcp \
+  --azure-client-id your-azure-client-id \
+  --azure-tenant-id your-azure-tenant-id \
+  --azure-client-secret your-azure-client-secret \
+  --jwt-secret-key your-secure-jwt-secret
 ```
 
 Available options:
@@ -191,6 +204,10 @@ Available options:
 - `--no-dynamodb-tables`: Disable creation of DynamoDB tables for agent and MCP services
 - `--s3-bucket-name BUCKET`: S3 bucket name for file storage (default: agentx-files-bucket)
 - `--s3-file-prefix PREFIX`: S3 file prefix for file storage (default: agentx/files)
+- `--azure-client-id ID`: Azure AD Client ID for SSO (optional)
+- `--azure-tenant-id ID`: Azure AD Tenant ID for SSO (optional)
+- `--azure-client-secret SEC`: Azure AD Client Secret for SSO (optional)
+- `--jwt-secret-key KEY`: JWT Secret Key for token generation (optional, uses default if not provided)
 - `--help`: Display help message with all available options
 
 ##### Option B: Manual CDK Deployment
@@ -284,6 +301,13 @@ After deployment is complete, you can verify the deployment by:
 3. Monitoring the ECS services in the AWS ECS console
 4. Testing user registration and login functionality
 5. Verifying data isolation by creating multiple user accounts
+6. **Testing Azure AD SSO** (if configured):
+   - Click "Sign in with Microsoft" button on the login page
+   - Verify redirect to Azure AD login page
+   - Complete authentication with Azure AD credentials
+   - Verify successful login and user profile synchronization
+   - Check that user information is correctly stored in DynamoDB
+   - Test logout and re-login functionality
 
 ## ⚙️ Configuration
 
@@ -299,10 +323,19 @@ const beContainer = beTaskDefinition.addContainer('BeContainer', {
   environment: {
     APP_ENV: 'production',
     AWS_REGION: this.region,
+    // JWT Configuration (required)
+    JWT_SECRET_KEY: 'your-jwt-secret-key-change-this-in-production',
+    // Azure AD Configuration (optional, for SSO)
+    AZURE_CLIENT_ID: 'your-azure-client-id',
+    AZURE_TENANT_ID: 'your-azure-tenant-id',
+    AZURE_CLIENT_SECRET: 'your-azure-client-secret',
+    AZURE_AUTHORITY: 'https://login.microsoftonline.com/your-azure-tenant-id',
     // Add other environment variables as needed
   },
 });
 ```
+
+> **Security Note**: For production deployments, use AWS Secrets Manager to store sensitive values like `JWT_SECRET_KEY` and `AZURE_CLIENT_SECRET` instead of hardcoding them in the CDK stack.
 
 #### Frontend Environment Variables
 
@@ -312,6 +345,11 @@ const feContainer = feTaskDefinition.addContainer('FeContainer', {
   environment: {
     NODE_ENV: 'production',
     API_BASE_URL: 'https://your-alb-dns-name/api',
+    // Azure AD Configuration (optional, for SSO)
+    VITE_AZURE_CLIENT_ID: 'your-azure-client-id',
+    VITE_AZURE_AUTHORITY: 'https://login.microsoftonline.com/your-azure-tenant-id',
+    VITE_AZURE_REDIRECT_URI: 'https://your-alb-dns-name',
+    VITE_AZURE_POST_LOGOUT_REDIRECT_URI: 'https://your-alb-dns-name',
     // Add other environment variables as needed
   },
 });
@@ -375,19 +413,38 @@ For production deployments, consider these security enhancements:
 
 1. **Use AWS Secrets Manager** for sensitive environment variables:
    ```typescript
-   const secret = secretsmanager.Secret.fromSecretNameV2(this, 'DbSecret', 'my-db-secret');
-   container.addEnvironment('DB_PASSWORD', secret.secretValueFromJson('password').toString());
+   // Store JWT secret in Secrets Manager
+   const jwtSecret = secretsmanager.Secret.fromSecretNameV2(this, 'JwtSecret', 'agentx/jwt-secret');
+   beContainer.addSecret('JWT_SECRET_KEY', ecs.Secret.fromSecretsManager(jwtSecret));
+   
+   // Store Azure AD credentials in Secrets Manager
+   const azureSecret = secretsmanager.Secret.fromSecretNameV2(this, 'AzureSecret', 'agentx/azure-credentials');
+   beContainer.addSecret('AZURE_CLIENT_SECRET', ecs.Secret.fromSecretsManager(azureSecret, 'client_secret'));
+   beContainer.addSecret('AZURE_CLIENT_ID', ecs.Secret.fromSecretsManager(azureSecret, 'client_id'));
+   beContainer.addSecret('AZURE_TENANT_ID', ecs.Secret.fromSecretsManager(azureSecret, 'tenant_id'));
    ```
 
-2. **Implement proper IAM roles and policies**:
+2. **Configure Azure AD App Registration for Production**:
+   - Update redirect URIs to use your production domain (e.g., `https://your-domain.com`)
+   - Enable only required API permissions
+   - Configure token lifetime policies according to your security requirements
+   - Enable Conditional Access policies for additional security
+   - Configure multi-factor authentication (MFA) requirements
+
+3. **Implement proper IAM roles and policies**:
    ```typescript
    const taskRole = new iam.Role(this, 'TaskRole', {
      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
    });
    taskRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBFullAccess'));
+   // Add Secrets Manager read permissions for Azure AD credentials
+   taskRole.addToPolicy(new iam.PolicyStatement({
+     actions: ['secretsmanager:GetSecretValue'],
+     resources: ['arn:aws:secretsmanager:region:account:secret:agentx/*'],
+   }));
    ```
 
-3. **Enable HTTPS** with an SSL certificate:
+4. **Enable HTTPS** with an SSL certificate:
    ```typescript
    const certificate = acm.Certificate.fromCertificateArn(this, 'Certificate', 'arn:aws:acm:region:account:certificate/certificate-id');
    const httpsListener = lb.addListener('HttpsListener', {
@@ -396,6 +453,12 @@ For production deployments, consider these security enhancements:
      sslPolicy: elbv2.SslPolicy.RECOMMENDED,
    });
    ```
+
+5. **Azure AD Token Security**:
+   - Backend validates Azure AD tokens using Microsoft's public keys
+   - Token expiration is enforced (default: 1 hour for access tokens)
+   - ID tokens are verified for audience, issuer, and signature
+   - User information is synchronized from Azure AD on each login
 
 ## 📊 Monitoring and Logging
 

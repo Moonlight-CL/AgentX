@@ -5,10 +5,6 @@ import { AgentXStack } from '../lib/agentx-stack-combined';
 
 const app = new cdk.App();
 
-// Get parameters from context or environment variables
-// Users can provide parameters using:
-// 1. CDK context: cdk deploy -c vpcId=vpc-12345 -c deployMysqlMcpServer=false
-// 2. Environment variables: VPC_ID=vpc-12345 DEPLOY_MYSQL_MCP=false cdk deploy
 const vpcId = app.node.tryGetContext('vpcId') || process.env.VPC_ID;
 const deployMysqlMcpServer = app.node.tryGetContext('deployMysqlMcpServer') !== 'false' && process.env.DEPLOY_MYSQL_MCP !== 'false';
 const deployRedshiftMcpServer = app.node.tryGetContext('deployRedshiftMcpServer') !== 'false' && process.env.DEPLOY_REDSHIFT_MCP !== 'false';
@@ -24,6 +20,14 @@ const awsDbMcpMemory = parseInt(app.node.tryGetContext('awsDbMcpMemory') || proc
 // S3 configuration parameters
 const s3BucketName = app.node.tryGetContext('s3BucketName') || process.env.S3_BUCKET_NAME || 'agentx-files-bucket';
 const s3FilePrefix = app.node.tryGetContext('s3FilePrefix') || process.env.S3_FILE_PREFIX || 'agentx/files';
+
+// Azure AD SSO Configuration parameters
+const azureClientId = app.node.tryGetContext('azureClientId') || process.env.AZURE_CLIENT_ID;
+const azureTenantId = app.node.tryGetContext('azureTenantId') || process.env.AZURE_TENANT_ID;
+const azureClientSecret = app.node.tryGetContext('azureClientSecret') || process.env.AZURE_CLIENT_SECRET;
+
+// JWT Secret Key
+const jwtSecretKey = app.node.tryGetContext('jwtSecretKey') || process.env.JWT_SECRET_KEY;
 
 // Create the combined AgentX stack
 new AgentXStack(app, 'AgentXStack', {
@@ -44,6 +48,10 @@ new AgentXStack(app, 'AgentXStack', {
   createDynamoDBTables: createDynamoDBTables,
   s3BucketName: s3BucketName,
   s3FilePrefix: s3FilePrefix,
+  azureClientId: azureClientId,
+  azureTenantId: azureTenantId,
+  azureClientSecret: azureClientSecret,
+  jwtSecretKey: jwtSecretKey,
 });
 
 // Log configuration
@@ -58,3 +66,5 @@ console.log(`AWS DB MCP server deployment: ${deployAwsDbMcpServer ? `Enabled (CP
 console.log(`DynamoDB tables creation: ${createDynamoDBTables ? 'Enabled' : 'Disabled'}`);
 console.log(`S3 bucket name: ${s3BucketName}`);
 console.log(`S3 file prefix: ${s3FilePrefix}`);
+console.log(`Azure AD SSO: ${azureClientId ? 'Enabled' : 'Disabled (username/password only)'}`);
+console.log(`JWT Secret Key: ${jwtSecretKey ? 'Configured' : 'Not configured (will use default)'}`);

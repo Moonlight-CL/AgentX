@@ -128,6 +128,7 @@ class AuthConfig:
             "/redoc",
             "/user/register",
             "/user/login",
+            "/user/azure-login",
             "/health",  # Health check endpoint
             "/metrics", # Metrics endpoint (if added)
         }

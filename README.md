@@ -8,6 +8,9 @@ AgentX is an agent management platform built on top of the Strands framework, al
 
 ### Core Platform Features
 - **User Authentication**: Secure user registration and login system with JWT token-based authentication
+  - **Local Authentication**: Username/password-based registration and login
+  - **Azure AD SSO**: Enterprise single sign-on integration with Microsoft Azure Active Directory
+  - **Hybrid Authentication**: Support both local and Azure AD authentication methods simultaneously
 - **Data Isolation**: Each user's agents, chat records, and data are completely isolated from other users
 - **Agent Management**: Create, configure, and manage AI agents through a user-friendly interface
 - **Multiple Model Support**: Use models from Bedrock, OpenAI, Anthropic, LiteLLM, Ollama, or custom providers
@@ -66,6 +69,95 @@ Model Context Protocol servers that extend agent capabilities:
 - Node.js 18+ and Bun
 - Docker (for containerized deployment)
 - AWS account (for AWS services)
+- Azure AD tenant (optional, for Azure AD SSO)
+
+### Azure AD SSO Configuration (Optional)
+
+AgentX supports Azure AD single sign-on for enterprise authentication. To enable Azure AD SSO:
+
+#### 1. Azure AD App Registration
+
+1. Go to [Azure Portal](https://portal.azure.com) → Azure Active Directory → App registrations
+2. Click "New registration"
+3. Configure the application:
+   - **Name**: AgentX (or your preferred name)
+   - **Supported account types**: Choose based on your requirements
+   - **Redirect URI**: 
+     - Type: Single-page application (SPA)
+     - URI: `http://localhost:5173` (for local development) or your production URL
+4. After registration, note down:
+   - **Application (client) ID**
+   - **Directory (tenant) ID**
+
+#### 2. Configure API Permissions
+
+1. In your app registration, go to "API permissions"
+2. Add the following Microsoft Graph permissions:
+   - `User.Read` (Delegated)
+   - `openid` (Delegated)
+   - `profile` (Delegated)
+   - `email` (Delegated)
+3. Grant admin consent for your organization (if required)
+
+#### 3. Backend Configuration
+
+Create or update `be/.env` file:
+
+```bash
+# JWT Configuration (required for all authentication methods)
+JWT_SECRET_KEY=your-jwt-secret-key-change-this-in-production
+
+# Azure AD Configuration (optional, for SSO)
+AZURE_CLIENT_ID=your-azure-client-id
+AZURE_TENANT_ID=your-azure-tenant-id
+AZURE_CLIENT_SECRET=your-azure-client-secret  # Optional, for server-side flows
+AZURE_AUTHORITY=https://login.microsoftonline.com/your-azure-tenant-id
+
+# AWS Configuration (for DynamoDB and other AWS services)
+AWS_REGION=us-east-1
+```
+
+#### 4. Frontend Configuration
+
+Create or update `fe/.env` file:
+
+```bash
+# Azure AD Configuration (optional, for SSO)
+VITE_AZURE_CLIENT_ID=your-azure-client-id
+VITE_AZURE_AUTHORITY=https://login.microsoftonline.com/your-azure-tenant-id
+VITE_AZURE_REDIRECT_URI=http://localhost:5173  # Optional, defaults to current origin
+VITE_AZURE_POST_LOGOUT_REDIRECT_URI=http://localhost:5173  # Optional
+```
+
+#### 5. How Azure AD SSO Works
+
+1. **User Login Flow**:
+   - User clicks "Sign in with Microsoft" button
+   - Frontend redirects to Azure AD login page
+   - User authenticates with Azure AD credentials
+   - Azure AD returns access token and ID token
+   - Frontend sends tokens to backend `/user/azure-login` endpoint
+   - Backend verifies tokens and creates/updates user account
+   - Backend returns local JWT token for subsequent API calls
+
+2. **Token Verification**:
+   - Backend verifies Azure AD tokens using Microsoft's public keys
+   - Extracts user information (email, name, object ID)
+   - Creates or updates user record in DynamoDB
+   - Issues local JWT token for API authentication
+
+3. **User Data Synchronization**:
+   - User profile information is synchronized from Azure AD
+   - Azure Object ID is stored for user identification
+   - User groups and roles can be mapped from Azure AD
+
+#### 6. Hybrid Authentication
+
+AgentX supports both local and Azure AD authentication simultaneously:
+
+- **Local users**: Register with username/password, authenticate with local credentials
+- **Azure AD users**: Sign in with Microsoft, automatically provisioned on first login
+- **Seamless integration**: Both authentication methods use the same JWT token system for API access
 
 ### Local Development
 

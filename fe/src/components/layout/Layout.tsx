@@ -12,6 +12,7 @@ import {
   ControlOutlined
 } from '@ant-design/icons';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
+import { useMsal } from '@azure/msal-react';
 import { Chat, ChatDetail } from '../chat';
 import { AgentHub } from '../agent';
 import { MCP } from '../mcp/MCP';
@@ -32,6 +33,7 @@ const LayoutContent: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [selectedKey, setSelectedKey] = useState('1');
   const navigate = useNavigate();
+  const { instance } = useMsal();
   const { isAuthenticated, user, logout } = useUserStore();
   const { 
     primaryCategories,
@@ -95,7 +97,18 @@ const LayoutContent: React.FC = () => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      // Clear local state
       logout();
+      
+      // If user logged in via Azure AD, also logout from Azure AD
+      if (user?.auth_provider === 'azure_ad') {
+        await instance.logoutRedirect({
+          postLogoutRedirectUri: window.location.origin
+        });
+      } else {
+        // For regular users, just navigate to login
+        navigate('/login');
+      }
     }
   };
 
