@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, message, Typography, Space } from 'antd';
+import { Form, Input, Button, Card, message, Typography, Space, Divider } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router-dom';
 import { userAPI, type UserLogin } from '../../services/api';
 import { useUserStore } from '../../store/userStore';
+import { AzureLoginWrapper } from './AzureLogin';
 
 const { Title, Text } = Typography;
 
@@ -102,6 +103,19 @@ export const Login: React.FC = () => {
             >
               Sign In
             </Button>
+          </Form.Item>
+
+          <Divider style={{ margin: '20px 0' }}>
+            <Text type="secondary" style={{ fontSize: '14px' }}>
+              OR
+            </Text>
+          </Divider>
+
+          <Form.Item style={{ marginBottom: '16px' }}>
+            <AzureLoginWrapper 
+              showIfNotConfigured={true}
+              disabled={loading}
+            />
           </Form.Item>
 
           <div style={{ textAlign: 'center' }}>

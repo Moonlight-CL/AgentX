@@ -13,18 +13,29 @@ class UserStatus(Enum):
     INACTIVE = "inactive"
     SUSPENDED = "suspended"
 
+class AuthProvider(Enum):
+    LOCAL = "local"
+    AZURE_AD = "azure_ad"
+
 class User(BaseModel):
     user_id: str
     username: str
     email: Optional[str] = None
-    password_hash: str
-    salt: str
+    password_hash: Optional[str] = None  # Optional for Azure AD users
+    salt: Optional[str] = None  # Optional for Azure AD users
     status: UserStatus = UserStatus.ACTIVE
     is_admin: bool = False
     user_groups: Optional[List[str]] = None  # List of user group IDs
     created_at: str
     updated_at: str
     last_login: Optional[str] = None
+    # Azure AD specific fields
+    auth_provider: AuthProvider = AuthProvider.LOCAL
+    azure_object_id: Optional[str] = None
+    azure_tenant_id: Optional[str] = None
+    display_name: Optional[str] = None
+    given_name: Optional[str] = None
+    family_name: Optional[str] = None
 
 class UserCreate(BaseModel):
     username: str
@@ -145,6 +156,42 @@ class UserService:
         # Use GSI to query by username
         response = table.scan(
             FilterExpression=boto3.dynamodb.conditions.Attr('username').eq(username)
+        )
+        
+        items = response.get('Items', [])
+        if items:
+            return self._map_user_item(items[0])
+        return None
+    
+    def get_user_by_azure_object_id(self, azure_object_id: str) -> Optional[User]:
+        """
+        Retrieve a user by their Azure AD object ID.
+        
+        :param azure_object_id: The Azure AD object ID to search for.
+        :return: User object if found, None otherwise.
+        """
+        table = self.dynamodb.Table(self.dynamodb_table_name)
+        
+        response = table.scan(
+            FilterExpression=boto3.dynamodb.conditions.Attr('azure_object_id').eq(azure_object_id)
+        )
+        
+        items = response.get('Items', [])
+        if items:
+            return self._map_user_item(items[0])
+        return None
+    
+    def get_user_by_email(self, email: str) -> Optional[User]:
+        """
+        Retrieve a user by their email address.
+        
+        :param email: The email address to search for.
+        :return: User object if found, None otherwise.
+        """
+        table = self.dynamodb.Table(self.dynamodb_table_name)
+        
+        response = table.scan(
+            FilterExpression=boto3.dynamodb.conditions.Attr('email').eq(email)
         )
         
         items = response.get('Items', [])
@@ -282,6 +329,132 @@ class UserService:
         items = response.get('Items', [])
         return [self._map_user_item(item) for item in items]
     
+    def create_azure_user(self, azure_user_info: dict) -> User:
+        """
+        Create a new Azure AD user in DynamoDB.
+        
+        :param azure_user_info: Azure AD user information.
+        :return: The created User object.
+        :raises ValueError: If user already exists.
+        """
+        azure_object_id = azure_user_info.get("azure_object_id")
+        email = azure_user_info.get("email")
+        
+        if not azure_object_id:
+            raise ValueError("Azure object ID is required")
+        
+        # Check if user already exists
+        existing_user = self.get_user_by_azure_object_id(azure_object_id)
+        if existing_user:
+            # Update existing user with latest info
+            return self.update_azure_user(existing_user.user_id, azure_user_info)
+        
+        # Generate username from email or use a default pattern
+        username = email.split('@')[0] if email else f"azure_{azure_object_id[:8]}"
+        
+        # Ensure username is unique
+        counter = 1
+        original_username = username
+        while self.get_user_by_username(username):
+            username = f"{original_username}_{counter}"
+            counter += 1
+        
+        # Create user object
+        user_id = uuid.uuid4().hex
+        current_time = datetime.now().isoformat()
+        
+        user = User(
+            user_id=user_id,
+            username=username,
+            email=email,
+            password_hash=None,  # No password for Azure AD users
+            salt=None,  # No salt for Azure AD users
+            status=UserStatus.ACTIVE,
+            auth_provider=AuthProvider.AZURE_AD,
+            azure_object_id=azure_object_id,
+            azure_tenant_id=azure_user_info.get("tenant_id"),
+            display_name=azure_user_info.get("name"),
+            given_name=azure_user_info.get("given_name"),
+            family_name=azure_user_info.get("family_name"),
+            created_at=current_time,
+            updated_at=current_time
+        )
+        
+        # Save to DynamoDB
+        table = self.dynamodb.Table(self.dynamodb_table_name)
+        item = {
+            'user_id': user.user_id,
+            'username': user.username,
+            'status': user.status.value,
+            'is_admin': user.is_admin,
+            'auth_provider': user.auth_provider.value,
+            'azure_object_id': user.azure_object_id,
+            'created_at': user.created_at,
+            'updated_at': user.updated_at
+        }
+        
+        # Add optional fields
+        if user.email:
+            item['email'] = user.email
+        if user.azure_tenant_id:
+            item['azure_tenant_id'] = user.azure_tenant_id
+        if user.display_name:
+            item['display_name'] = user.display_name
+        if user.given_name:
+            item['given_name'] = user.given_name
+        if user.family_name:
+            item['family_name'] = user.family_name
+        if user.user_groups:
+            item['user_groups'] = user.user_groups
+        
+        table.put_item(Item=item)
+        
+        return user
+    
+    def update_azure_user(self, user_id: str, azure_user_info: dict) -> User:
+        """
+        Update Azure AD user information.
+        
+        :param user_id: The user ID to update.
+        :param azure_user_info: Azure AD user information.
+        :return: Updated User object.
+        """
+        table = self.dynamodb.Table(self.dynamodb_table_name)
+        
+        update_expression = "SET updated_at = :updated_at"
+        expression_values = {
+            ':updated_at': datetime.now().isoformat()
+        }
+        
+        # Update fields from Azure AD
+        if azure_user_info.get("email"):
+            update_expression += ", email = :email"
+            expression_values[':email'] = azure_user_info["email"]
+        
+        if azure_user_info.get("name"):
+            update_expression += ", display_name = :display_name"
+            expression_values[':display_name'] = azure_user_info["name"]
+        
+        if azure_user_info.get("given_name"):
+            update_expression += ", given_name = :given_name"
+            expression_values[':given_name'] = azure_user_info["given_name"]
+        
+        if azure_user_info.get("family_name"):
+            update_expression += ", family_name = :family_name"
+            expression_values[':family_name'] = azure_user_info["family_name"]
+        
+        response = table.update_item(
+            Key={'user_id': user_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+            ReturnValues='ALL_NEW'
+        )
+        
+        if 'Attributes' in response:
+            return self._map_user_item(response['Attributes'])
+        
+        return self.get_user_by_id(user_id)
+    
     def change_password(self, user_id: str, old_password: str, new_password: str) -> bool:
         """
         Change a user's password.
@@ -293,6 +466,10 @@ class UserService:
         """
         user = self.get_user_by_id(user_id)
         if not user:
+            return False
+        
+        # Check if this is a local user (has password)
+        if user.auth_provider != AuthProvider.LOCAL or not user.password_hash or not user.salt:
             return False
         
         # Verify old password
@@ -333,12 +510,18 @@ class UserService:
             user_id=item['user_id'],
             username=item['username'],
             email=item.get('email'),
-            password_hash=item['password_hash'],
-            salt=item['salt'],
+            password_hash=item.get('password_hash'),
+            salt=item.get('salt'),
             status=UserStatus(item['status']),
             is_admin=item.get('is_admin', False),
             user_groups=item.get('user_groups'),
             created_at=item['created_at'],
             updated_at=item['updated_at'],
-            last_login=item.get('last_login')
+            last_login=item.get('last_login'),
+            auth_provider=AuthProvider(item.get('auth_provider', 'local')),
+            azure_object_id=item.get('azure_object_id'),
+            azure_tenant_id=item.get('azure_tenant_id'),
+            display_name=item.get('display_name'),
+            given_name=item.get('given_name'),
+            family_name=item.get('family_name')
         )

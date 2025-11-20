@@ -13,6 +13,8 @@
     "@ant-design/icons": "6.0.0",
     "@ant-design/v5-patch-for-react-19": "1.0.3",
     "@ant-design/x": "1.4.0",
+    "@azure/msal-browser": "^4.26.1",
+    "@azure/msal-react": "^3.0.21",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "@xyflow/react": "^12.8.6",

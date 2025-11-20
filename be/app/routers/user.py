@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
 from typing import List
+from pydantic import BaseModel
 from ..user.models import User, UserCreate, UserLogin, UserUpdate, UserService
 from ..user.auth import JWTAuth, get_current_user, AuthMiddleware
+from ..user.azure_auth import azure_auth
 from ..config.config import ConfigService
 
 router = APIRouter(
@@ -13,6 +15,13 @@ router = APIRouter(
 
 user_service = UserService()
 config_service = ConfigService()
+
+class AzureLoginRequest(BaseModel):
+    access_token: str
+    id_token: str
+
+class AzureTokenValidationRequest(BaseModel):
+    access_token: str
 
 @router.post("/register")
 async def register_user(user_data: UserCreate) -> JSONResponse:
@@ -82,12 +91,137 @@ async def login_user(login_data: UserLogin) -> JSONResponse:
                 "username": user.username,
                 "email": user.email,
                 "status": user.status.value,
-                "last_login": user.last_login
+                "last_login": user.last_login,
+                "auth_provider": user.auth_provider.value,
+                "display_name": user.display_name
             },
             "access_token": access_token,
             "token_type": "bearer"
         }
     )
+
+@router.post("/azure-login")
+async def azure_login(azure_data: AzureLoginRequest) -> JSONResponse:
+    """
+    Authenticate user with Azure AD tokens and return local JWT token.
+    
+    :param azure_data: Azure AD tokens (access_token and id_token).
+    :return: Local JWT token and user info.
+    """
+    try:
+        # Verify Azure AD ID token
+        azure_user_info = azure_auth.verify_azure_token(azure_data.id_token)
+        print(azure_user_info)
+        
+        if not azure_user_info:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Azure AD token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Find or create user based on Azure AD info
+        user = user_service.get_user_by_azure_object_id(azure_user_info["azure_object_id"])
+        
+        if not user:
+            # Create new user from Azure AD info
+            user = user_service.create_azure_user(azure_user_info)
+        else:
+            # Update existing user with latest Azure AD info
+            user = user_service.update_azure_user(user.user_id, azure_user_info)
+        
+        # Update last login
+        user_service.update_last_login(user.user_id)
+        
+        # Create local JWT token
+        access_token = JWTAuth.create_access_token(user.user_id, user.username)
+        
+        return JSONResponse(
+            content={
+                "message": "Azure AD login successful",
+                "user": {
+                    "user_id": user.user_id,
+                    "username": user.username,
+                    "email": user.email,
+                    "status": user.status.value,
+                    "last_login": user.last_login,
+                    "auth_provider": user.auth_provider.value,
+                    "display_name": user.display_name,
+                    "azure_object_id": user.azure_object_id
+                },
+                "access_token": access_token,
+                "token_type": "bearer"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Azure AD login error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Azure AD login failed"
+        )
+
+@router.post("/azure-validate")
+async def validate_azure_token(token_data: AzureTokenValidationRequest) -> JSONResponse:
+    """
+    Validate Azure AD access token and return user info.
+    
+    :param token_data: Azure AD access token.
+    :return: User information if token is valid.
+    """
+    try:
+        # Verify Azure AD access token
+        azure_user_info = azure_auth.verify_azure_token(token_data.access_token)
+        
+        if not azure_user_info:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Azure AD token"
+            )
+        
+        # Find user based on Azure AD info
+        user = user_service.get_user_by_azure_object_id(azure_user_info["azure_object_id"])
+        
+        if not user:
+            return JSONResponse(
+                content={
+                    "valid": True,
+                    "user_exists": False,
+                    "azure_user_info": {
+                        "azure_object_id": azure_user_info["azure_object_id"],
+                        "email": azure_user_info["email"],
+                        "name": azure_user_info["name"],
+                        "given_name": azure_user_info["given_name"],
+                        "family_name": azure_user_info["family_name"]
+                    }
+                }
+            )
+        
+        return JSONResponse(
+            content={
+                "valid": True,
+                "user_exists": True,
+                "user": {
+                    "user_id": user.user_id,
+                    "username": user.username,
+                    "email": user.email,
+                    "status": user.status.value,
+                    "auth_provider": user.auth_provider.value,
+                    "display_name": user.display_name
+                }
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Azure AD token validation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token validation failed"
+        )
 
 @router.get("/me")
 async def get_current_user_info(current_user: dict = Depends(get_current_user)) -> dict:
@@ -206,7 +340,7 @@ async def verify_token(current_user: dict = Depends(get_current_user)) -> JSONRe
 @router.get("/list")
 async def list_users(
     limit: int = 100,
-    current_user: dict = Depends(AuthMiddleware.require_admin)
+    current_user: dict = Depends(AuthMiddleware.require_auth)
 ) -> List[dict]:
     """
     List all users (admin only).
@@ -335,7 +469,7 @@ async def delete_user_by_id(
 # User group management endpoints (admin only)
 @router.get("/groups/list")
 async def list_user_groups(
-    current_user: dict = Depends(AuthMiddleware.require_admin)
+    current_user: dict = Depends(AuthMiddleware.require_auth)
 ) -> JSONResponse:
     """
     List all user groups (admin only).

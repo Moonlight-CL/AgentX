@@ -543,6 +543,15 @@ export interface UserLogin {
   password: string;
 }
 
+export interface AzureLoginRequest {
+  access_token: string;
+  id_token: string;
+}
+
+export interface AzureTokenValidationRequest {
+  access_token: string;
+}
+
 export interface UserInfo {
   user_id: string;
   username: string;
@@ -702,6 +711,26 @@ export const userAPI = {
       return response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || 'Failed to change password');
+    }
+  },
+
+  // Azure AD login
+  azureLogin: async (azureData: AzureLoginRequest): Promise<AuthResponse> => {
+    try {
+      const response = await axios.post(`${BASE_URL}/user/azure-login`, azureData);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Azure AD login failed');
+    }
+  },
+
+  // Validate Azure AD token
+  validateAzureToken: async (tokenData: AzureTokenValidationRequest): Promise<{ valid: boolean; user_exists: boolean; user?: UserInfo; azure_user_info?: any }> => {
+    try {
+      const response = await axios.post(`${BASE_URL}/user/azure-validate`, tokenData);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Azure AD token validation failed');
     }
   },
 

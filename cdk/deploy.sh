@@ -19,6 +19,10 @@ usage() {
   echo "  --no-dynamodb-tables        Disable creation of DynamoDB tables for agent and MCP services"
   echo "  --s3-bucket-name BUCKET     S3 bucket name for file storage (default: agentx-files-bucket)"
   echo "  --s3-file-prefix PREFIX     S3 file prefix for file storage (default: agentx/files)"
+  echo "  --azure-client-id ID        Azure AD Client ID for SSO (optional)"
+  echo "  --azure-tenant-id ID        Azure AD Tenant ID for SSO (optional)"
+  echo "  --azure-client-secret SEC   Azure AD Client Secret for SSO (optional)"
+  echo "  --jwt-secret-key KEY        JWT Secret Key for token generation (optional, uses default if not provided)"
   echo "  --help                      Display this help message"
   exit 1
 }
@@ -36,6 +40,10 @@ AWS_DB_MCP_MEMORY=2048
 CREATE_DYNAMODB_TABLES=true
 S3_BUCKET_NAME="agentx-files-bucket"
 S3_FILE_PREFIX="agentx/files"
+AZURE_CLIENT_ID=""
+AZURE_TENANT_ID=""
+AZURE_CLIENT_SECRET=""
+JWT_SECRET_KEY=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -88,6 +96,22 @@ while [[ $# -gt 0 ]]; do
       S3_FILE_PREFIX="$2"
       shift 2
       ;;
+    --azure-client-id)
+      AZURE_CLIENT_ID="$2"
+      shift 2
+      ;;
+    --azure-tenant-id)
+      AZURE_TENANT_ID="$2"
+      shift 2
+      ;;
+    --azure-client-secret)
+      AZURE_CLIENT_SECRET="$2"
+      shift 2
+      ;;
+    --jwt-secret-key)
+      JWT_SECRET_KEY="$2"
+      shift 2
+      ;;
     --help)
       usage
       ;;
@@ -117,6 +141,16 @@ echo "DynamoDB tables creation: $([ "$CREATE_DYNAMODB_TABLES" = true ] && echo "
 echo "S3 bucket name: ${S3_BUCKET_NAME}"
 echo "S3 file prefix: ${S3_FILE_PREFIX}"
 echo "Agent Schedule functionality: Enabled"
+if [ -n "$AZURE_CLIENT_ID" ]; then
+  echo "Azure AD SSO: Enabled"
+else
+  echo "Azure AD SSO: Disabled (username/password only)"
+fi
+if [ -n "$JWT_SECRET_KEY" ]; then
+  echo "JWT Secret Key: Custom key provided"
+else
+  echo "JWT Secret Key: Using default (not recommended for production)"
+fi
 
 # Bootstrap CDK if not already done
 echo "Checking if CDK is bootstrapped..."
@@ -180,6 +214,23 @@ CDK_PARAMS="$CDK_PARAMS -c s3FilePrefix=$S3_FILE_PREFIX"
 if [ "$CREATE_DYNAMODB_TABLES" = false ]; then
   CDK_PARAMS="$CDK_PARAMS -c createDynamoDBTables=false"
   export CREATE_DYNAMODB_TABLES=false
+fi
+
+# Add Azure AD and JWT configuration parameters
+if [ -n "$AZURE_CLIENT_ID" ]; then
+  CDK_PARAMS="$CDK_PARAMS -c azureClientId=$AZURE_CLIENT_ID"
+fi
+
+if [ -n "$AZURE_TENANT_ID" ]; then
+  CDK_PARAMS="$CDK_PARAMS -c azureTenantId=$AZURE_TENANT_ID"
+fi
+
+if [ -n "$AZURE_CLIENT_SECRET" ]; then
+  CDK_PARAMS="$CDK_PARAMS -c azureClientSecret=$AZURE_CLIENT_SECRET"
+fi
+
+if [ -n "$JWT_SECRET_KEY" ]; then
+  CDK_PARAMS="$CDK_PARAMS -c jwtSecretKey=$JWT_SECRET_KEY"
 fi
 
 # Export S3 configuration for CDK

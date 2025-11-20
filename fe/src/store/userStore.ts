@@ -8,6 +8,9 @@ export interface User {
   status: string;
   is_admin?: boolean;
   user_groups?: string[];
+  auth_provider?: string;
+  display_name?: string;
+  azure_object_id?: string;
 }
 
 interface UserState {
