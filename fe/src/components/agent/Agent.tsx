@@ -23,7 +23,7 @@ import {
 import { AGENT_TYPES, TOOL_TYPES } from '../../services/api';
 import type { Agent, Tool } from '../../services/api';
 import { useAgentStore } from '../../store/agentStore';
-import { useModelProviders } from '../../hooks/useModelProviders';
+import { useModelProviders, type ModelConfig } from '../../hooks/useModelProviders';
 import { useUserStore } from '../../store/userStore';
 
 const { Title } = Typography;
@@ -117,38 +117,40 @@ export const AgentManager: React.FC = () => {
       });
     }
   }, [selectedAgent, editModalVisible, editForm]);
-  
+
+  // Helper Function: Extract model extras from model config
+  const extractModelExtras = (model: ModelConfig) => {
+    return {
+      ...(model.config.api_base_url && { base_url: model.config.api_base_url }),
+      ...(model.config.api_key && { api_key: model.config.api_key }),
+      ...(model.config.max_tokens && { max_tokens: model.config.max_tokens }),
+      ...(model.config.temperature && { temperature: model.config.temperature }),
+      ...(model.config.top_p && { top_p: model.config.top_p }),
+    };
+  };
   // Handle form values change
-  const handleFormValuesChange = (changedValues: { model_provider?: number, model_id?: string}, form: FormInstance) => {
+  const handleFormValuesChange = (changedValues: { model_provider?: number, model_id?: string }, form: FormInstance) => {
     if ('model_provider' in changedValues) {
       // Reset model_id when model_provider changes
       const providerKey = getProviderKey(changedValues.model_provider!);
       const modelIds = getModelIds(providerKey);
       const provider = providers.find(p => p.key === providerKey)!;
-      
+
       if (modelIds.length > 0) {
         form.setFieldsValue({ model_id: modelIds[0] });
         const model = provider.models.find(m => m.config.model_id === modelIds[0])!;
-        if(model.config.api_base_url && model.config.api_key) {
-            form.setFieldsValue({extras: { base_url: model.config.api_base_url, api_key: model.config.api_key }});
-        }else {
-          form.setFieldsValue({ extras: {} });
-        }
+        form.setFieldsValue({ extras: extractModelExtras(model) });
       } else {
         form.setFieldsValue({ model_id: 'Custom' });
       }
     }
 
-    if('model_id' in changedValues) {
+    if ('model_id' in changedValues) {
       const provider = getProviderKey(form.getFieldValue("model_provider"))!;
       const modelId = changedValues.model_id!;
-
       const model = providers.find(p => p.key === provider)!.models.find(m => m.config.model_id === modelId)!;
-      if(model.config.api_base_url && model.config.api_key) {
-        form.setFieldsValue({extras: { base_url: model.config.api_base_url, api_key: model.config.api_key }});
-      }else {
-        form.setFieldsValue({ extras: {} });
-      }
+
+      form.setFieldsValue({ extras: extractModelExtras(model) });
     }
   };
   
@@ -554,29 +556,8 @@ export const AgentManager: React.FC = () => {
 
             const model_id = getFieldValue('model_id');
             const model = provider?.models.find(m => m.config.model_id === model_id);
-            let extra_items = [];
-            if (model?.config.api_base_url) {
-              extra_items.push(
-                <Form.Item
-                  key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
-                  hidden
-                  name={['extras', 'base_url']}
-                  label="Base URL">
-                    <Input />
-                </Form.Item>
-              )
-            }
-            if (model?.config.api_key) {
-              extra_items.push(
-                <Form.Item
-                  key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
-                  hidden
-                  name={['extras', 'api_key']}
-                  label="API KEY">
-                    <Input />
-                </Form.Item>
-              )
-            }
+            
+            const extra_items = buildAgentExtrasFields(model);
             return <>{extra_items}</>;
           }
         }
@@ -883,29 +864,7 @@ export const AgentManager: React.FC = () => {
 
                   const model_id = getFieldValue('model_id');
                   const model = provider?.models.find(m => m.config.model_id === model_id);
-                  let extra_items = [];
-                  if (model?.config.api_base_url) {
-                    extra_items.push(
-                      <Form.Item
-                        key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
-                        hidden
-                        name={['extras', 'base_url']}
-                        label="Base URL">
-                          <Input />
-                      </Form.Item>
-                    )
-                  }
-                  if (model?.config.api_key) {
-                    extra_items.push(
-                      <Form.Item
-                        key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
-                        hidden
-                        name={['extras', 'api_key']}
-                        label="API KEY">
-                          <Input />
-                      </Form.Item>
-                    )
-                  }
+                  let extra_items = buildAgentExtrasFields(model);
                   return <>{extra_items}</>;
                 }
               }
@@ -1092,3 +1051,63 @@ export const AgentManager: React.FC = () => {
     </div>
   );
 };
+function buildAgentExtrasFields(model: ModelConfig | undefined) {
+  let extra_items = [];
+  if (model?.config.api_base_url) {
+    extra_items.push(
+      <Form.Item
+        key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
+        hidden
+        name={['extras', 'base_url']}
+        label="Base URL">
+        <Input />
+      </Form.Item>
+    );
+  }
+  if (model?.config.api_key) {
+    extra_items.push(
+      <Form.Item
+        key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
+        hidden
+        name={['extras', 'api_key']}
+        label="API KEY">
+        <Input />
+      </Form.Item>
+    );
+  }
+  if (model?.config.max_tokens) {
+    extra_items.push(
+      <Form.Item
+        key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
+        hidden
+        name={['extras', 'max_tokens']}
+        label="Max Tokens">
+        <Input type="number" />
+      </Form.Item>
+    );
+  }
+  if (model?.config.temperature) {
+    extra_items.push(
+      <Form.Item
+        key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
+        hidden
+        name={['extras', 'temperature']}
+        label="Temperature">
+        <Input type="number" step="0.1" />
+      </Form.Item>
+    );
+  }
+  if (model?.config.top_p) {
+    extra_items.push(
+      <Form.Item
+        key={`${Date.now()}-${Math.floor(Math.random() * 100)}`}
+        hidden
+        name={['extras', 'top_p']}
+        label="Top P">
+        <Input type="number" step="0.1" />
+      </Form.Item>
+    );
+  }
+  return extra_items;
+}
+
