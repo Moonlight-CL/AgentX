@@ -120,9 +120,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       set({ currentChatId: chatId });
       
-      // Get the chat record to find the agent_id
-      const records = await chatAPI.getChatRecords();
-      const chatRecord = records.find(record => record.id === chatId);
+      // Get the specific chat record directly using the backend API
+      const chatRecord = await chatAPI.getChatRecord(chatId);
       
       if (chatRecord) {
         // Find the agent used in this chat

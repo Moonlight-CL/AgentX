@@ -1023,6 +1023,17 @@ export const chatAPI = {
     }
   },
 
+  // Get a specific chat record by ID
+  getChatRecord: async (chatId: string): Promise<ChatRecord | null> => {
+    try {
+      const response = await apiAxios.get(`${BASE_URL}/chat/get_chat?chat_id=${chatId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching chat record for chat ID ${chatId}:`, error);
+      return null;
+    }
+  },
+
   // Get chat responses for a specific chat
   getChatResponses: async (chatId: string): Promise<ChatResponse[]> => {
     try {

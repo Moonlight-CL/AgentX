@@ -53,6 +53,7 @@ export const Config: React.FC = () => {
   const [form] = Form.useForm();
   const [modelProviderForm] = Form.useForm();
   const [categoryTree, setCategoryTree] = useState<ConfigCategory[]>([]);
+  // const [needInitDefaultCategories, setNeedInitDefaultCategories] = useState<boolean>(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [configs, setConfigs] = useState<SystemConfig[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,7 +65,7 @@ export const Config: React.FC = () => {
   // Load category tree on component mount
   useEffect(() => {
     loadCategoryTree();
-    initializeDefaultCategories();
+    // initializeDefaultCategories();
   }, []);
 
   // Load configs when category is selected
@@ -76,9 +77,7 @@ export const Config: React.FC = () => {
 
   const initializeDefaultCategories = async () => {
     try {
-      if (categoryTree.length == 0) {
-        await configAPI.initDefaultCategories();
-      }
+      await configAPI.initDefaultCategories();
     } catch (error) {
       console.error('Error initializing default categories:', error);
     }
@@ -97,6 +96,8 @@ export const Config: React.FC = () => {
       // Auto select first category if exists
       if (response.data.length > 0) {
         setSelectedCategory(response.data[0].key);
+      } else {
+        await initializeDefaultCategories();
       }
     } catch (error) {
       message.error('加载配置分类失败');
