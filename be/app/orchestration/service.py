@@ -1,10 +1,13 @@
 import uuid
-from datetime import datetime
+import json
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from decimal import Decimal
 import asyncio
-from ..utils.aws_config import get_orchestration_table
+from ..utils.aws_config import get_orchestration_table, get_chat_session_table
 from ..agent.agent import AgentPOService, ChatRecordService, ChatRecord, ChatResponse
+from strands.types.session import SessionType, SessionMessage
+from strands.types.content import Message, ContentBlock
 from .models import (
     OrchestrationConfig,
     OrchestrationExecution,
@@ -58,6 +61,7 @@ class OrchestrationService:
     def __init__(self):
         self.orchestration_table = get_orchestration_table()
         self.chat_service = ChatRecordService()
+        self.chat_session_table = get_chat_session_table()
         # Track running tasks for cancellation
         self.running_tasks: Dict[str, asyncio.Task] = {}
         self.cancellation_events: Dict[str, asyncio.Event] = {}
@@ -568,6 +572,9 @@ class OrchestrationService:
     ):
         """
         Extract NodeResult messages from MultiAgentResult and store them as ChatResponse records.
+        
+        DEPRECATED: This method is preserved for backward compatibility but should not be used
+        for new implementations. Use _store_orchestration_session instead.
 
         Args:
             result: The MultiAgentResult from orchestration execution
@@ -619,6 +626,124 @@ class OrchestrationService:
             print(f"Error extracting and storing MultiAgentResult: {str(e)}")
             # Don't raise the exception to avoid breaking the main execution flow
 
+    def _store_orchestration_session(
+        self, result, orchestration_id: str, execution_id: str, user_id: str, input_message: str
+    ):
+        """
+        Store multi-agent orchestration results in ChatSessionTable.
+        
+        This method creates a session for the orchestration execution and stores
+        messages from each agent node directly in DynamoDB ChatSessionTable.
+
+        Args:
+            result: The MultiAgentResult from orchestration execution
+            orchestration_id: The ID of the orchestration
+            execution_id: The execution ID to use as session_id
+            user_id: The user ID for the session
+            input_message: The original input message that started the orchestration
+        """
+        try:
+            current_time = datetime.now(timezone.utc).isoformat()
+            
+            # Create SESSION record
+            session_item = {
+                'PK': execution_id,
+                'SK': 'SESSION',
+                'session_id': execution_id,
+                'session_type': SessionType.AGENT.value,
+                'created_at': current_time,
+                'updated_at': current_time,
+                'record_type': 'session'
+            }
+            self.chat_session_table.put_item(Item=session_item)
+            print(f"Created orchestration session {execution_id} for user {user_id}")
+            
+            # Collect all node results with their messages
+            node_results = []
+            
+            for node_id, node_result in result.results.items():
+                # Get all AgentResults from this node
+                agent_results = node_result.get_agent_results()
+                
+                for agent_result in agent_results:
+                    # Extract message content from AgentResult
+                    message_content = str(agent_result)
+                    
+                    if message_content.strip():
+                        node_results.append({
+                            "node_id": node_id,
+                            "message": message_content.strip(),
+                            "execution_time": getattr(node_result, "execution_time", 0),
+                            "create_time": current_time
+                        })
+            
+            # Sort by execution time to maintain chronological order
+            node_results.sort(key=lambda x: x["execution_time"])
+
+            # Store user message (input) as message_id 0
+            user_message = Message(
+                role="user",
+                content=[ContentBlock(text=input_message)]
+            )
+
+            agent_session_id = f"{orchestration_id}_{execution_id}"
+            
+            session_user_msg = SessionMessage(
+                message=user_message,
+                message_id=0,
+                created_at=current_time,
+                updated_at=current_time
+            )
+            
+            user_message_item = {
+                'PK': execution_id,
+                'SK': f'MESSAGE#{agent_session_id}#{0:06d}',
+                'session_id': execution_id,
+                'agent_id': orchestration_id,
+                'message_id': 0,
+                'message_content': json.dumps(session_user_msg.to_dict()),
+                'created_at': current_time,
+                'updated_at': current_time,
+                'record_type': 'message'
+            }
+            self.chat_session_table.put_item(Item=user_message_item)
+
+            for i, node_result in enumerate(node_results):
+
+                idx = i + 1
+                assistant_message = Message(
+                        role="assistant",
+                        content=[ContentBlock(text=node_result["message"])]
+                    )
+                
+                session_assistant_msg = SessionMessage(
+                    message=assistant_message,
+                    message_id= idx,
+                    created_at=node_result["create_time"],
+                    updated_at=node_result["create_time"],
+                )
+
+                message_item = {
+                    'PK': execution_id,
+                    'SK': f'MESSAGE#{agent_session_id}#{idx:06d}',
+                    'session_id': execution_id,
+                    'agent_id': f"{orchestration_id}_{node_id}",
+                    'message_id': idx,
+                    'message_content': json.dumps(session_assistant_msg.to_dict()),
+                    'created_at': node_result["create_time"],
+                    'updated_at': node_result["create_time"],
+                    'record_type': 'message'
+                }
+                self.chat_session_table.put_item(Item=message_item)
+            
+            print(f"Stored orchestration session with {len(node_results)} messages for execution {execution_id}")
+            
+        except Exception as e:
+            print(f"Error storing orchestration session: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # Don't raise the exception to avoid breaking the main execution flow
+
     async def execute_swarm(
         self, execution: OrchestrationExecution, orchestration: OrchestrationConfig
     ) -> Dict[str, Any]:
@@ -626,6 +751,8 @@ class OrchestrationService:
         from strands.multiagent import Swarm
 
         agent_service = AgentPOService()
+        # Get user id from execution, and use it as agent id, possibly this would be changed later
+        user_id = execution.userId
 
         # Build agents from nodes
         agents = []
@@ -633,7 +760,7 @@ class OrchestrationService:
 
         for node in orchestration.nodes:
             if node.type == "agent" and node.agentId:
-                agent_po = agent_service.get_agent(node.agentId)
+                agent_po = agent_service.get_agent(user_id=user_id, id=node.agentId)
                 if agent_po:
                     strands_agent = agent_service.build_strands_agent(
                         agent_po, name=node.name
@@ -668,9 +795,9 @@ class OrchestrationService:
         # Execute swarm
         result = await swarm.invoke_async(execution.inputMessage)
 
-        # Extract and store the MultiAgentResult messages
-        self._extract_and_store_multiagent_result(
-            result, execution.id, execution.userId
+        # Store the orchestration session in ChatSessionTable
+        self._store_orchestration_session(
+            result, execution.orchestrationId, execution.id, execution.userId, execution.inputMessage
         )
 
         return {
@@ -686,14 +813,14 @@ class OrchestrationService:
         from strands.multiagent import GraphBuilder
 
         agent_service = AgentPOService()
-
+        user_id = execution.userId
         # Build agents from nodes
         agents = {}
         node_id_to_agent_id = {}
 
         for node in orchestration.nodes:
             if node.type == "agent" and node.agentId:
-                agent_po = agent_service.get_agent(node.agentId)
+                agent_po = agent_service.get_agent(user_id= user_id, id=node.agentId)
                 if agent_po:
                     strands_agent = agent_service.build_strands_agent(
                         agent_po, name=agent_po.name, callback_handler=None
@@ -744,9 +871,9 @@ class OrchestrationService:
         # Execute graph (wrap in asyncio to make it async)
         result = await graph.invoke_async(execution.inputMessage)
 
-        # Extract and store the MultiAgentResult messages
-        self._extract_and_store_multiagent_result(
-            result, execution.id, execution.userId
+        # Store the orchestration session in ChatSessionTable
+        self._store_orchestration_session(
+            result, execution.orchestrationId, execution.id, execution.userId, execution.inputMessage
         )
 
         return {
@@ -767,6 +894,7 @@ class OrchestrationService:
         import time
 
         agent_service = AgentPOService()
+        user_id = execution.userId
 
         # Build agents from nodes
         agents = {}
@@ -774,7 +902,7 @@ class OrchestrationService:
 
         for idx, node in enumerate(orchestration.nodes):
             if node.type == "agent" and node.agentId:
-                agent_po = agent_service.get_agent(node.agentId)
+                agent_po = agent_service.get_agent(user_id=user_id, id=node.agentId)
                 if agent_po:
                     strands_agent = (
                         agent_service.build_strands_agent(
@@ -862,10 +990,10 @@ class OrchestrationService:
             def __str__(self):
                 return self.text
 
-        # Create workflow result and extract messages
+        # Create workflow result and store session
         workflow_result = WorkflowResult(workflow_results)
-        self._extract_and_store_multiagent_result(
-            workflow_result, execution.id, execution.userId
+        self._store_orchestration_session(
+            workflow_result, execution.orchestrationId, execution.id, execution.userId, execution.inputMessage
         )
 
         return {
@@ -883,6 +1011,7 @@ class OrchestrationService:
         import time
 
         agent_service = AgentPOService()
+        user_id = execution.userId
 
         # Get orchestrator agent
         orchestrator_agent_id = orchestration.orchestratorAgent
@@ -891,7 +1020,7 @@ class OrchestrationService:
                 "No orchestrator agent specified for agents-as-tools orchestration"
             )
 
-        orchestrator_po = agent_service.get_agent(orchestrator_agent_id)
+        orchestrator_po = agent_service.get_agent(user_id=user_id,id=orchestrator_agent_id)
         if not orchestrator_po:
             raise ValueError(f"Orchestrator agent {orchestrator_agent_id} not found")
 
@@ -905,7 +1034,7 @@ class OrchestrationService:
                 and node.agentId
                 and node.agentId != orchestrator_agent_id
             ):
-                agent_po = agent_service.get_agent(node.agentId)
+                agent_po = agent_service.get_agent(user_id=user_id,id=node.agentId)
 
                 if agent_po and node.agentId != orchestrator_agent_id:
 
@@ -963,10 +1092,10 @@ class OrchestrationService:
                 def __str__(self):
                     return self.text
 
-            # Create result and extract messages
+            # Create result and store session
             orchestration_result = AgentsAsToolsResult(str(result))
-            self._extract_and_store_multiagent_result(
-                orchestration_result, execution.id, execution.userId
+            self._store_orchestration_session(
+                orchestration_result, execution.orchestrationId, execution.id, execution.userId, execution.inputMessage
             )
 
             return {

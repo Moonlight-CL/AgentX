@@ -298,7 +298,6 @@ class DynamoDBSessionRepository(SessionRepository):
             message_dict = json.loads(item['message_content'])
             content_blocks = message_dict.get("message").get("content")
 
-            print("dadfasdfasdfasdfasdfasdf")
             for c in content_blocks:
                 if c.get("image"):
                     s3key = c.get("image").get("source").get("s3key")
