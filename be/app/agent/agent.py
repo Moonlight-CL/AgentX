@@ -665,9 +665,17 @@ class AgentPOService:
                 connect_timeout=kwargs['connect_timeout'] if 'connect_timeout' in kwargs else 10,
                 read_timeout=kwargs['read_timeout'] if 'read_timeout' in kwargs else 900
             )
+            max_tokens = int(agent.extras.get('max_tokens')) if agent.extras and 'max_tokens' in agent.extras else None
+            temperature = float(agent.extras.get('temperature')) if agent.extras and 'temperature' in agent.extras else None
+            top_p = float(agent.extras.get('top_p')) if agent.extras and 'top_p' in agent.extras else None
+
+            print(f"Building Bedrock model: model_id={agent.model_id}, max_tokens={max_tokens}, temperature={temperature}, top_p={top_p}")
 
             model = BedrockModel(
                 model_id=agent.model_id,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
                 region_name=get_aws_region(),
                 boto_client_config=boto_config,
             )
