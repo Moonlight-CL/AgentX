@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { RestAPI } from '../types';
 
 // Base URL for API calls using Vite proxy
 const BASE_URL = '/api';
@@ -49,6 +50,16 @@ const MCP_API = {
   createOrUpdate: `${BASE_URL}/mcp/createOrUpdate`,
   get: (id: string) => `${BASE_URL}/mcp/get/${id}`,
   delete: (id: string) => `${BASE_URL}/mcp/delete/${id}`,
+};
+
+// REST API endpoints
+const REST_API = {
+  list: `${BASE_URL}/rest-apis`,
+  create: `${BASE_URL}/rest-apis`,
+  get: (id: string) => `${BASE_URL}/rest-apis/${id}`,
+  update: (id: string) => `${BASE_URL}/rest-apis/${id}`,
+  delete: (id: string) => `${BASE_URL}/rest-apis/${id}`,
+  test: (id: string) => `${BASE_URL}/rest-apis/${id}/test`,
 };
 
 // Schedule API endpoints
@@ -896,6 +907,37 @@ export const mcpAPI = {
       console.warn('Falling back to mock behavior');
       return true;
     }
+  },
+};
+
+export const restApiAPI = {
+  getRestAPIs: async (): Promise<RestAPI[]> => {
+    const response = await apiAxios.get(REST_API.list);
+    return response.data;
+  },
+
+  getRestAPI: async (id: string): Promise<RestAPI> => {
+    const response = await apiAxios.get(REST_API.get(id));
+    return response.data;
+  },
+
+  createRestAPI: async (data: Omit<RestAPI, 'api_id' | 'user_id'>): Promise<RestAPI> => {
+    const response = await apiAxios.post(REST_API.create, data);
+    return response.data;
+  },
+
+  updateRestAPI: async (id: string, data: Omit<RestAPI, 'api_id' | 'user_id'>): Promise<RestAPI> => {
+    const response = await apiAxios.put(REST_API.update(id), data);
+    return response.data;
+  },
+
+  deleteRestAPI: async (id: string): Promise<void> => {
+    await apiAxios.delete(REST_API.delete(id));
+  },
+
+  testEndpoint: async (id: string, endpoint_path: string, params?: any): Promise<any> => {
+    const response = await apiAxios.post(REST_API.test(id), { endpoint_path, params });
+    return response.data;
   },
 };
 

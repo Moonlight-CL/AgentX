@@ -9,6 +9,7 @@ from .routers import user
 from .routers import orchestration
 from .routers import config
 from .routers import files
+from .routers import rest_api
 from .middleware.auth_middleware import AuthMiddleware, AuthConfig
 
 app = FastAPI()
@@ -28,6 +29,7 @@ app.include_router(user.router, prefix=url_prefix)
 app.include_router(orchestration.router, prefix=url_prefix)
 app.include_router(config.router, prefix=url_prefix)
 app.include_router(files.router, prefix=url_prefix)
+app.include_router(rest_api.router, prefix=url_prefix)
 
 @app.get("/")
 def home():
