@@ -22,12 +22,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/user/login",
         }
         
-        # Add API prefix for production environment
-        app_env = os.environ.get("APP_ENV", "")
-        if app_env == "production":
-            # Add /api prefix versions of public paths
-            api_public_paths = {f"/api{path}" for path in self.public_paths}
-            self.public_paths.update(api_public_paths)
+        # Always add both with and without /api prefix to handle proxy scenarios
+        api_public_paths = {f"/api{path}" for path in list(self.public_paths)}
+        self.public_paths.update(api_public_paths)
     
     async def dispatch(self, request: Request, call_next):
         """

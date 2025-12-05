@@ -58,9 +58,12 @@ async def register_user(user_data: UserCreate) -> JSONResponse:
             detail=str(e)
         )
     except Exception as e:
+        print(f"Registration error: {str(e)}")  # Add logging
+        import traceback
+        traceback.print_exc()  # Print full traceback
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to register user"
+            detail=f"Failed to register user: {str(e)}"
         )
 
 @router.post("/login")

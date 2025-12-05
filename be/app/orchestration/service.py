@@ -636,7 +636,7 @@ class OrchestrationService:
                 agent_po = agent_service.get_agent(node.agentId)
                 if agent_po:
                     strands_agent = agent_service.build_strands_agent(
-                        agent_po, name=node.name
+                        agent_po, name=node.name, user_id=execution.userId
                     )
                     agents.append(strands_agent)
                     agent_map[node.agentId] = strands_agent
@@ -696,7 +696,7 @@ class OrchestrationService:
                 agent_po = agent_service.get_agent(node.agentId)
                 if agent_po:
                     strands_agent = agent_service.build_strands_agent(
-                        agent_po, name=agent_po.name, callback_handler=None
+                        agent_po, name=agent_po.name, callback_handler=None, user_id=execution.userId
                     )
                     agents[node.id] = strands_agent
                     node_id_to_agent_id[node.id] = node.agentId
@@ -778,10 +778,10 @@ class OrchestrationService:
                 if agent_po:
                     strands_agent = (
                         agent_service.build_strands_agent(
-                            agent_po, name=node.name, callback_handler=None
+                            agent_po, name=node.name, callback_handler=None, user_id=execution.userId
                         )
                         if idx != len(orchestration.nodes) - 1
-                        else agent_service.build_strands_agent(agent_po, name=node.name)
+                        else agent_service.build_strands_agent(agent_po, name=node.name, user_id=execution.userId)
                     )
 
                     agents[node.id] = strands_agent
@@ -921,6 +921,7 @@ class OrchestrationService:
             name=orchestrator_po.name,
             callback_handler=None,
             additional_tools=tool_functions,
+            user_id=execution.userId,
         )
 
         try:

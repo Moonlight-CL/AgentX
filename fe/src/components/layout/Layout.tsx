@@ -9,13 +9,15 @@ import {
   ScheduleOutlined,
   UserOutlined,
   LogoutOutlined,
-  ControlOutlined
+  ControlOutlined,
+  ApiOutlined
 } from '@ant-design/icons';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
 import { useMsal } from '@azure/msal-react';
 import { Chat, ChatDetail } from '../chat';
 import { AgentHub } from '../agent';
 import { MCP } from '../mcp/MCP';
+import { RestAPI } from '../restapi';
 import { Schedule } from '../schedule';
 import { Config } from '../config/Config';
 import { OrchestrationEditor } from '../orchestration';
@@ -82,6 +84,8 @@ const LayoutContent: React.FC = () => {
       setSelectedKey('2');
     } else if (path.includes('/mcp')) {
       setSelectedKey('3');
+    } else if (path.includes('/restapi')) {
+      setSelectedKey('7');
     } else if (path.includes('/schedule')) {
       setSelectedKey('4');
     } else if (path.includes('/user-management')) {
@@ -159,6 +163,11 @@ const LayoutContent: React.FC = () => {
       key: '3',
       icon: <AppstoreOutlined />,
       label: <Link to="/mcp">MCP 列表</Link>,
+    },
+    {
+      key: '7',
+      icon: <ApiOutlined />,
+      label: <Link to="/restapi">REST API</Link>,
     },
     {
       key: '4',
@@ -279,6 +288,7 @@ const LayoutContent: React.FC = () => {
             <Route path="/chat-detail" element={<ChatDetail />} />
             <Route path="/agent" element={<AgentHub />} />
             <Route path="/mcp" element={<MCP />} />
+            <Route path="/restapi" element={<RestAPI />} />
             <Route path="/schedule" element={<Schedule />} />
             <Route path="/config" element={<Config />} />
             <Route path="/user-management" element={<UserManagement />} />

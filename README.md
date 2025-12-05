@@ -206,6 +206,10 @@ AgentX supports both local and Azure AD authentication simultaneously:
      - Partition key: `user_id` (String)
      - Sort key: `id` (String)
    
+   - **RestAPIRegistry** (REST API adapter configurations)
+     - Partition key: `user_id` (String)
+     - Sort key: `api_id` (String)
+   
    - **AgentScheduleTable** (Scheduled agent tasks)
      - Partition key: `id` (String)
    

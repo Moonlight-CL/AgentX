@@ -221,3 +221,34 @@ export const getEventType = (event: AgentEvent): 'text' | 'tool' | 'event' | 'me
   if ('reasoning' in event) return 'reasoning';
   return 'lifecycle';
 };
+
+// REST API Types
+export interface EndpointParameters {
+  query?: Record<string, string>;
+  body?: Record<string, string>;
+  headers?: Record<string, string>;
+}
+
+export interface EndpointConfig {
+  path: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  tool_name: string;
+  tool_description: string;
+  parameters?: EndpointParameters;
+  response_mapping?: any;
+}
+
+export interface AuthConfig {
+  header?: string;
+  value: string;
+}
+
+export interface RestAPI {
+  api_id?: string;
+  user_id?: string;
+  name: string;
+  base_url: string;
+  auth_type: 'bearer' | 'api_key' | 'basic' | 'none';
+  auth_config?: AuthConfig;
+  endpoints: EndpointConfig[];
+}

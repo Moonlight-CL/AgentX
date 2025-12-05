@@ -8,6 +8,7 @@ export { useAgentStore } from './agentStore';
 export { useMCPStore } from './mcpStore';
 export { useUserStore } from './userStore';
 export { useUseCaseStore } from './useCaseStore';
+export { useRestApiStore } from './restApiStore';
 
 interface ChatState {
   // Conversations
