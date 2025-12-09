@@ -181,6 +181,7 @@ export interface MCPServer {
   name: string;
   desc: string;
   host: string;
+  headers?: Record<string, string>;
 }
 
 // Interface for ChatRecord

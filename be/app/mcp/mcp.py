@@ -9,6 +9,7 @@ class HttpMCPServer(BaseModel):
    name: str
    desc: str
    host: str
+   headers: dict[str, str] | None = None
 
 
 class MCPService:
@@ -29,15 +30,16 @@ class MCPService:
         """
         if not server.id:
             server.id = uuid.uuid4().hex
-        self.mcp_table.put_item(
-            Item={
-                'user_id': user_id,
-                'id': server.id,
-                'name': server.name,
-                'desc': server.desc,
-                'host': server.host
-            }
-        )
+        item = {
+            'user_id': user_id,
+            'id': server.id,
+            'name': server.name,
+            'desc': server.desc,
+            'host': server.host
+        }
+        if server.headers:
+            item['headers'] = server.headers
+        self.mcp_table.put_item(Item=item)
 
     def list_mcp_servers(self, user_id: str) -> list[HttpMCPServer]:
         """
