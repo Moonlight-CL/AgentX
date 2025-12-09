@@ -731,7 +731,10 @@ class AgentPOService:
                     print(f"[MCP] Initializing MCP client for {t.name}")
                     print(f"[MCP] URL: {t.mcp_server_url}")
                     print(f"[MCP] Headers: {t.mcp_server_headers}")
-                    streamable_http_mcp_client = MCPClient(lambda: streamablehttp_client(t.mcp_server_url, headers=t.mcp_server_headers))
+                    
+                    streamable_http_mcp_client = MCPClient(
+                        lambda: streamablehttp_client(t.mcp_server_url, headers=t.mcp_server_headers)
+                    )
                     streamable_http_mcp_client = streamable_http_mcp_client.start()
                     tools.extend(streamable_http_mcp_client.list_tools_sync())
             else:
