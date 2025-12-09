@@ -79,13 +79,14 @@ class Tools(Enum):
 
 
 class HttpMCPSerer(object):
-    def __init__(self, name: str, desc: str, url: str):
+    def __init__(self, name: str, desc: str, url: str, headers: dict[str, str] | None = None):
         self.name = name
         self.desc = desc
         self.url = url
+        self.headers = headers
 
     def __repr__(self):
-        return f"HttpMCPSerer(name={self.name}, desc={self.desc}, url={self.url})"
+        return f"HttpMCPSerer(name={self.name}, desc={self.desc}, url={self.url}, headers={bool(self.headers)})"
 
 class AgentTool(BaseModel):
     name: str
@@ -94,12 +95,14 @@ class AgentTool(BaseModel):
     desc:str
     type: AgentToolType = AgentToolType.strands
     mcp_server_url: Optional[str] = None
+    mcp_server_headers: Optional[dict] = None
     agent_id: Optional[str] = None
     extra: Optional[dict] = None
 
     def __repr__(self):
         return f"AgentTool(name={self.name}, display_name={self.display_name} ,category={self.category},  " \
                f"desc={self.desc}, type={self.type}, mcp_server_url={self.mcp_server_url}, "\
+               f"mcp_server_headers={bool(self.mcp_server_headers)}, "\
                f"agent_id={self.agent_id}, extra={self.extra})"
     
 class AgentPO(BaseModel):
@@ -542,7 +545,15 @@ class AgentPOService:
         # Add MCP tools
         mcpService = MCPService()
         for mcp in mcpService.list_mcp_servers(user_id):
-            tools.append(AgentTool(name=mcp.name, display_name=mcp.name, category="Mcp", desc=mcp.desc, type=AgentToolType.mcp, mcp_server_url=mcp.host))
+            tools.append(AgentTool(
+                name=mcp.name, 
+                display_name=mcp.name, 
+                category="Mcp", 
+                desc=mcp.desc, 
+                type=AgentToolType.mcp, 
+                mcp_server_url=mcp.host,
+                mcp_server_headers=mcp.headers
+            ))
         
         # Add REST API tools
         try:
@@ -717,7 +728,10 @@ class AgentPOService:
                         traceback.print_exc()
                 elif t.mcp_server_url:
                     # Regular MCP server
-                    streamable_http_mcp_client = MCPClient(lambda: streamablehttp_client(t.mcp_server_url))
+                    print(f"[MCP] Initializing MCP client for {t.name}")
+                    print(f"[MCP] URL: {t.mcp_server_url}")
+                    print(f"[MCP] Headers: {t.mcp_server_headers}")
+                    streamable_http_mcp_client = MCPClient(lambda: streamablehttp_client(t.mcp_server_url, headers=t.mcp_server_headers))
                     streamable_http_mcp_client = streamable_http_mcp_client.start()
                     tools.extend(streamable_http_mcp_client.list_tools_sync())
             else:
@@ -826,6 +840,7 @@ class AgentPOService:
                              desc=tool_json['desc'],
                              type=AgentToolType(tool_json['type']),
                              mcp_server_url=tool_json.get('mcp_server_url', None),
+                             mcp_server_headers=tool_json.get('mcp_server_headers', None),
                              agent_id= tool_json.get('agent_id', None))
         
         # Handle agent_type - convert to int if it's a Decimal
