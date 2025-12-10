@@ -59,7 +59,7 @@ export const MCP: React.FC = () => {
   // Initialize edit form when selected server changes
   useEffect(() => {
     if (selectedServer && editModalVisible) {
-      const formValues = { ...selectedServer };
+      const formValues = { ...selectedServer } as Record<string, any>;
       if (formValues.headers && typeof formValues.headers === 'object') {
         formValues.headers = JSON.stringify(formValues.headers, null, 2);
       } else {
@@ -74,28 +74,68 @@ export const MCP: React.FC = () => {
     fetchMCPServers();
   }, [fetchMCPServers]);
   
+  // Parse headers string to object, handling edge cases
+  const parseHeaders = (headers: string | Record<string, string> | undefined): Record<string, string> | undefined => {
+    // Early return for non-string types
+    if (!headers || typeof headers !== 'string') {
+      return undefined;
+    }
+
+    const trimmedHeaders = headers.trim();
+    
+    // Early return for empty strings
+    if (!trimmedHeaders) {
+      return undefined;
+    }
+
+    // Parse JSON with error handling
+    try {
+      const parsed = JSON.parse(trimmedHeaders);
+      // Validate that parsed result is an object with string values
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parsed as Record<string, string>;
+      }
+      return undefined;
+    } catch (error) {
+      console.error('Failed to parse headers JSON:', error);
+      throw new Error('Invalid JSON format in headers field');
+    }
+  };
+
   // Handle create MCP server form submission
   const handleCreateMCPServer = async (values: Omit<MCPServer, 'id'>) => {
-    const payload = { ...values };
-    if (payload.headers && typeof payload.headers === 'string' && payload.headers.trim()) {
-      payload.headers = JSON.parse(payload.headers);
-    } else {
-      delete payload.headers;
+    try {
+      const parsedHeaders = parseHeaders(values.headers as string | undefined);
+      
+      const payload = {
+        ...values,
+        ...(parsedHeaders && { headers: parsedHeaders })
+      };
+
+      await createMCPServer(payload);
+      createForm.resetFields();
+    } catch (error) {
+      console.error('Failed to create MCP server:', error);
+      throw error;
     }
-    await createMCPServer(payload);
-    createForm.resetFields();
   };
   
   // Handle edit MCP server form submission
   const handleUpdateMCPServer = async (values: MCPServer) => {
-    const payload = { ...values };
-    if (payload.headers && typeof payload.headers === 'string' && payload.headers.trim()) {
-      payload.headers = JSON.parse(payload.headers);
-    } else {
-      delete payload.headers;
+    try {
+      const parsedHeaders = parseHeaders(values.headers as string | undefined);
+      
+      const payload = {
+        ...values,
+        ...(parsedHeaders && { headers: parsedHeaders })
+      };
+
+      await updateMCPServer(payload);
+      editForm.resetFields();
+    } catch (error) {
+      console.error('Failed to update MCP server:', error);
+      throw error;
     }
-    await updateMCPServer(payload);
-    editForm.resetFields();
   };
   
 

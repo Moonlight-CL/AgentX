@@ -1,12 +1,14 @@
 from typing import Dict, List, Optional
 import boto3
 from boto3.dynamodb.conditions import Key
+from app.utils.aws_config import get_rest_api_registry_table
 
 
 class RestAPIRegistry:
-    def __init__(self, table_name: str = "RestAPIRegistry"):
-        self.dynamodb = boto3.resource('dynamodb')
-        self.table = self.dynamodb.Table(table_name)
+    def __init__(self):
+        # self.dynamodb = boto3.resource('dynamodb')
+        # self.table = self.dynamodb.Table(table_name)
+        self.table = get_rest_api_registry_table()
     
     async def get_user_apis(self, user_id: str) -> List[Dict]:
         """Get all REST APIs registered by a user"""
