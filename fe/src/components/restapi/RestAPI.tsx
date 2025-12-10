@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
 import { Card, Typography, Table, Button, Space, Modal, Form, Input, Select, message } from 'antd';
-import { PlusOutlined, EyeOutlined, EditOutlined, DeleteOutlined, ApiOutlined } from '@ant-design/icons';
+import { PlusOutlined, EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useRestApiStore } from '../../store/restApiStore';
-import type { RestAPI, EndpointConfig } from '../../types';
+import type { RestAPI as RestAPIType } from '../../types';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -51,7 +51,7 @@ export const RestAPI: React.FC = () => {
     fetchRestAPIs();
   }, [fetchRestAPIs]);
   
-  const handleCreateRestAPI = async (values: any) => {
+  const handleCreateRestAPI = async (values: Omit<RestAPIType, 'api_id' | 'user_id'>) => {
     try {
       // Parse endpoints JSON string to array
       const parsedValues = {
@@ -62,12 +62,13 @@ export const RestAPI: React.FC = () => {
       };
       await createRestAPI(parsedValues);
       createForm.resetFields();
-    } catch (error: any) {
-      message.error(error.message || 'Invalid JSON format in endpoints');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Invalid JSON format in endpoints';
+      message.error(errorMessage);
     }
   };
   
-  const handleUpdateRestAPI = async (values: any) => {
+  const handleUpdateRestAPI = async (values: Omit<RestAPIType, 'api_id' | 'user_id'>) => {
     try {
       // Parse endpoints JSON string to array
       const parsedValues = {
@@ -78,8 +79,9 @@ export const RestAPI: React.FC = () => {
       };
       await updateRestAPI({ ...parsedValues, api_id: selectedApi?.api_id });
       editForm.resetFields();
-    } catch (error: any) {
-      message.error(error.message || 'Invalid JSON format in endpoints');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Invalid JSON format in endpoints';
+      message.error(errorMessage);
     }
   };
 
@@ -106,13 +108,13 @@ export const RestAPI: React.FC = () => {
       title: 'Endpoints',
       key: 'endpoints',
       width: 100,
-      render: (_: any, record: RestAPI) => record.endpoints?.length || 0,
+      render: (_: unknown, record: RestAPIType) => record.endpoints?.length || 0,
     },
     {
       title: 'Actions',
       key: 'actions',
       width: 150,
-      render: (_: any, record: RestAPI) => (
+      render: (_: unknown, record: RestAPIType) => (
         <Space size="small">
           <Button type="link" icon={<EyeOutlined />} onClick={() => handleViewApi(record)} />
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEditApi(record)} />

@@ -66,6 +66,9 @@ class DynamoDBTables:
     # Configuration related tables
     CONFIGURATIONS = "ConfTable"
 
+    # Rest API Registry table
+    REST_API_REGISTRY = "RestAPIRegistryTable"
+
 def get_agent_table():
     """Get the agents DynamoDB table."""
     return get_dynamodb_table(DynamoDBTables.AGENTS)
@@ -105,3 +108,7 @@ def get_config_table():
 def get_chat_session_table():
     """Get the chat sessions DynamoDB table."""
     return get_dynamodb_table(DynamoDBTables.CHAT_SESSIONS)
+
+def get_rest_api_registry_table():
+    """Get the REST API registry DynamoDB table."""
+    return get_dynamodb_table(DynamoDBTables.REST_API_REGISTRY)
