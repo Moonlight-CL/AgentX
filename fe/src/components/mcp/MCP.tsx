@@ -59,7 +59,13 @@ export const MCP: React.FC = () => {
   // Initialize edit form when selected server changes
   useEffect(() => {
     if (selectedServer && editModalVisible) {
-      editForm.setFieldsValue(selectedServer);
+      const formValues = { ...selectedServer };
+      if (formValues.headers && typeof formValues.headers === 'object') {
+        formValues.headers = JSON.stringify(formValues.headers, null, 2);
+      } else {
+        formValues.headers = '';
+      }
+      editForm.setFieldsValue(formValues);
     }
   }, [selectedServer, editModalVisible, editForm]);
   
@@ -70,13 +76,25 @@ export const MCP: React.FC = () => {
   
   // Handle create MCP server form submission
   const handleCreateMCPServer = async (values: Omit<MCPServer, 'id'>) => {
-    await createMCPServer(values);
+    const payload = { ...values };
+    if (payload.headers && typeof payload.headers === 'string' && payload.headers.trim()) {
+      payload.headers = JSON.parse(payload.headers);
+    } else {
+      delete payload.headers;
+    }
+    await createMCPServer(payload);
     createForm.resetFields();
   };
   
   // Handle edit MCP server form submission
   const handleUpdateMCPServer = async (values: MCPServer) => {
-    await updateMCPServer(values);
+    const payload = { ...values };
+    if (payload.headers && typeof payload.headers === 'string' && payload.headers.trim()) {
+      payload.headers = JSON.parse(payload.headers);
+    } else {
+      delete payload.headers;
+    }
+    await updateMCPServer(payload);
     editForm.resetFields();
   };
   
@@ -154,6 +172,7 @@ export const MCP: React.FC = () => {
         name: '',
         desc: '',
         host: '',
+        headers: '',
       }}
     >
       <Form.Item
@@ -186,6 +205,29 @@ export const MCP: React.FC = () => {
       >
         <Input placeholder="例如: http://localhost:8001" />
       </Form.Item>
+      
+      <Form.Item
+        name="headers"
+        label="请求头 (JSON格式)"
+        rules={[
+          { 
+            validator: (_, value) => {
+              if (!value) return Promise.resolve();
+              try {
+                JSON.parse(value);
+                return Promise.resolve();
+              } catch {
+                return Promise.reject(new Error('请输入有效的JSON格式'));
+              }
+            }
+          }
+        ]}
+      >
+        <TextArea 
+          rows={3} 
+          placeholder='例如: {"Authorization": "Bearer token123"}' 
+        />
+      </Form.Item>
     </Form>
   );
   
@@ -198,6 +240,9 @@ export const MCP: React.FC = () => {
         <p><strong>名称:</strong> {selectedServer.name}</p>
         <p><strong>描述:</strong> {selectedServer.desc}</p>
         <p><strong>主机地址:</strong> {selectedServer.host}</p>
+        {selectedServer.headers && (
+          <p><strong>请求头:</strong> <pre>{JSON.stringify(selectedServer.headers, null, 2)}</pre></p>
+        )}
       </div>
     </div>
   );
@@ -295,6 +340,29 @@ export const MCP: React.FC = () => {
               ]}
             >
               <Input placeholder="例如: http://localhost:8001" />
+            </Form.Item>
+            
+            <Form.Item
+              name="headers"
+              label="请求头 (JSON格式)"
+              rules={[
+                { 
+                  validator: (_, value) => {
+                    if (!value) return Promise.resolve();
+                    try {
+                      JSON.parse(value);
+                      return Promise.resolve();
+                    } catch {
+                      return Promise.reject(new Error('请输入有效的JSON格式'));
+                    }
+                  }
+                }
+              ]}
+            >
+              <TextArea 
+                rows={3} 
+                placeholder='例如: {"Authorization": "Bearer token123"}' 
+              />
             </Form.Item>
           </Form>
         </Modal>

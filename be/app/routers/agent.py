@@ -188,7 +188,7 @@ async def process_chat_events_with_session(user_id: str, agent_id: str, user_inp
         raise ValueError(f"Agent with ID {agent_id} not found.")
     
     # Build agent with session management using chat_id as session_id
-    agent_instance = agent_service.build_strands_agent_with_session(agent, chat_id)
+    agent_instance = agent_service.build_strands_agent_with_session(agent, chat_id, user_id=user_id)
     
     # Convert text and files to content blocks if files are present
     if file_attachments:

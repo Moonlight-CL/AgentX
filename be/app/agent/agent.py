@@ -79,13 +79,14 @@ class Tools(Enum):
 
 
 class HttpMCPSerer(object):
-    def __init__(self, name: str, desc: str, url: str):
+    def __init__(self, name: str, desc: str, url: str, headers: dict[str, str] | None = None):
         self.name = name
         self.desc = desc
         self.url = url
+        self.headers = headers
 
     def __repr__(self):
-        return f"HttpMCPSerer(name={self.name}, desc={self.desc}, url={self.url})"
+        return f"HttpMCPSerer(name={self.name}, desc={self.desc}, url={self.url}, headers={bool(self.headers)})"
 
 class AgentTool(BaseModel):
     name: str
@@ -94,12 +95,14 @@ class AgentTool(BaseModel):
     desc:str
     type: AgentToolType = AgentToolType.strands
     mcp_server_url: Optional[str] = None
+    mcp_server_headers: Optional[dict] = None
     agent_id: Optional[str] = None
     extra: Optional[dict] = None
 
     def __repr__(self):
         return f"AgentTool(name={self.name}, display_name={self.display_name} ,category={self.category},  " \
                f"desc={self.desc}, type={self.type}, mcp_server_url={self.mcp_server_url}, "\
+               f"mcp_server_headers={bool(self.mcp_server_headers)}, "\
                f"agent_id={self.agent_id}, extra={self.extra})"
     
 class AgentPO(BaseModel):
@@ -529,6 +532,7 @@ class AgentPOService:
         :param user_id: The user ID for data isolation.
         :return: A list of AgentTool objects.
         """
+        print(f"Getting all available tools for user: {user_id}")
         tools = []
         for tool in Tools:
             tools.append(AgentTool(name=tool.identify, display_name=tool.name, category=tool.category, desc=tool.desc))
@@ -541,8 +545,45 @@ class AgentPOService:
         # Add MCP tools
         mcpService = MCPService()
         for mcp in mcpService.list_mcp_servers(user_id):
-            tools.append(AgentTool(name=mcp.name, display_name=mcp.name, category="Mcp", desc=mcp.desc, type=AgentToolType.mcp, mcp_server_url=mcp.host))
+            tools.append(AgentTool(
+                name=mcp.name, 
+                display_name=mcp.name, 
+                category="Mcp", 
+                desc=mcp.desc, 
+                type=AgentToolType.mcp, 
+                mcp_server_url=mcp.host,
+                mcp_server_headers=mcp.headers
+            ))
         
+        # Add REST API tools
+        try:
+            from ..services.rest_api_registry import RestAPIRegistry
+            import asyncio
+            
+            print(f"Loading REST API tools for user: {user_id}")
+            registry = RestAPIRegistry()
+            rest_apis = asyncio.run(registry.get_user_apis(user_id))
+            print(f"Found {len(rest_apis)} REST APIs")
+            
+            for api in rest_apis:
+                print(f"Processing API: {api['name']}")
+                for endpoint in api.get('endpoints', []):
+                    tool_name = f"{api['name']}.{endpoint['tool_name']}"
+                    print(f"Adding REST API tool: {tool_name}")
+                    tools.append(AgentTool(
+                        name=tool_name,
+                        display_name=endpoint['tool_name'],
+                        category="REST API",
+                        desc=f"{endpoint['tool_description']} ({api['name']})",
+                        type=AgentToolType.mcp,
+                        mcp_server_url=""  # Empty string to distinguish from real MCP servers
+                    ))
+        except Exception as e:
+            print(f"Error loading REST API tools: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        print(f"Total tools loaded: {len(tools)}")
         return tools
 
     def build_strands_agent_with_session(self, agent: AgentPO, session_id: str, **kwargs) -> Agent:
@@ -551,6 +592,7 @@ class AgentPOService:
 
         :param agent: The AgentPO object to build the Strands agent from.
         :param session_id: The session ID to use for session management.
+        :param user_id: Optional user_id for loading REST API tools
         :return: A Strands Agent instance with session management.
         """
         # Create DynamoDB session repository
@@ -576,6 +618,7 @@ class AgentPOService:
         Build a Strands agent from an AgentPO object.
 
         :param agent: The AgentPO object to build the Strands agent from.
+        :param user_id: Optional user_id for loading REST API tools
         :return: A Strands Agent instance.
         """
         
@@ -649,12 +692,53 @@ class AgentPOService:
                 agent_po = self.get_agent('public', t.agent_id)
                 if agent_po:
                     tools.append(self.agent_as_tool(agent_po))
-            elif t.type == AgentToolType.mcp and t.mcp_server_url:
-                # If the tool is an MCP server, create a Strands MCP client
-                streamable_http_mcp_client = MCPClient(lambda: streamablehttp_client(t.mcp_server_url))
-                streamable_http_mcp_client = streamable_http_mcp_client.start()
-                tools.extend(streamable_http_mcp_client.list_tools_sync())
+            elif t.type == AgentToolType.mcp:
+                # Check if this is a REST API tool (format: "API_Name.tool_name" with empty mcp_server_url)
+                if '.' in t.name and not t.mcp_server_url:
+                    # This is a REST API tool
+                    try:
+                        from ..services.rest_api_registry import RestAPIRegistry
+                        from ..services.rest_mcp_adapter import RestMCPAdapter
+                        
+                        api_name, tool_name = t.name.split('.', 1)
+                        registry = RestAPIRegistry()
+                        
+                        # Get user_id from kwargs or use 'public'
+                        user_id = kwargs.get('user_id', 'public')
+                        
+                        # Use synchronous DynamoDB query
+                        response = registry.table.query(
+                            KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(user_id)
+                        )
+                        apis = response.get('Items', [])
+                        
+                        for api in apis:
+                            if api['name'] == api_name:
+                                for endpoint in api.get('endpoints', []):
+                                    if endpoint['tool_name'] == tool_name:
+                                        adapter = RestMCPAdapter(registry)
+                                        tool_func = adapter._create_tool(api, endpoint)
+                                        tools.append(tool_func)
+                                        print(f"Loaded REST API tool: {t.name}")
+                                        break
+                                break
+                    except Exception as e:
+                        print(f"Error loading REST API tool {t.name}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                elif t.mcp_server_url:
+                    # Regular MCP server
+                    print(f"[MCP] Initializing MCP client for {t.name}")
+                    print(f"[MCP] URL: {t.mcp_server_url}")
+                    print(f"[MCP] Headers: {t.mcp_server_headers}")
+                    
+                    streamable_http_mcp_client = MCPClient(
+                        lambda: streamablehttp_client(t.mcp_server_url, headers=t.mcp_server_headers)
+                    )
+                    streamable_http_mcp_client = streamable_http_mcp_client.start()
+                    tools.extend(streamable_http_mcp_client.list_tools_sync())
             else:
+                print(f"Unsupported tool type: {t.type}")
                 print(f"Unsupported tool type: {t.type}")
         
 
@@ -714,6 +798,10 @@ class AgentPOService:
         if kwargs and 'additional_tools' in kwargs:
             tools.extend(kwargs['additional_tools'])
             kwargs.pop('additional_tools')
+        
+        # Remove user_id from kwargs as Agent doesn't accept it
+        if 'user_id' in kwargs:
+            kwargs.pop('user_id')
 
         from strands.agent.conversation_manager import SlidingWindowConversationManager
         conversation_Manager = SlidingWindowConversationManager(window_size = 100)
@@ -755,14 +843,25 @@ class AgentPOService:
                              desc=tool_json['desc'],
                              type=AgentToolType(tool_json['type']),
                              mcp_server_url=tool_json.get('mcp_server_url', None),
+                             mcp_server_headers=tool_json.get('mcp_server_headers', None),
                              agent_id= tool_json.get('agent_id', None))
+        
+        # Handle agent_type - convert to int if it's a Decimal
+        agent_type_value = item['agent_type']
+        if isinstance(agent_type_value, (int, float)):
+            agent_type_value = int(agent_type_value)
+        
+        # Validate agent_type is valid (1 or 2)
+        if agent_type_value not in [1, 2]:
+            print(f"Warning: Invalid agent_type {agent_type_value} for agent {item.get('id')}, defaulting to plain")
+            agent_type_value = 1  # Default to plain
     
         return AgentPO(
             id=item['id'],
             name=item['name'],
             display_name=item['display_name'],
             description=item['description'],
-            agent_type=AgentType(item['agent_type']),
+            agent_type=AgentType(agent_type_value),
             model_provider=ModelProvider(item['model_provider']),
             model_id=item['model_id'],
             sys_prompt=item['sys_prompt'],

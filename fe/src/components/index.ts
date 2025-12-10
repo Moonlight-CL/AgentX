@@ -5,3 +5,4 @@ export * from './agent';
 export * from './mcp';
 export * from './auth';
 export * from './orchestration';
+export * from './restapi';
