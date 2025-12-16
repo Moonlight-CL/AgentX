@@ -65,7 +65,7 @@ async def create_mcp_server(server: Request, current_user: dict = Depends(get_cu
         name=server_data.get("name"),
         desc=server_data.get("desc"),
         host=server_data.get("host"),
-        headers=server_data.get("headers")
+        headers= None if not server_data.get("headers") else server_data.get("headers"),
     )
     mcp_service.add_mcp_server(server, user_id)
     return server
