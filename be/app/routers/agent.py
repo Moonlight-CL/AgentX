@@ -5,10 +5,9 @@ from dataclasses import dataclass
 
 from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
-from typing import List, Dict, Tuple, Optional, AsyncGenerator
+from typing import List, Dict, Optional, AsyncGenerator
 from ..agent.agent import AgentPO, AgentType, ModelProvider, AgentTool, AgentPOService, ChatRecord, ChatResponse, ChatRecordService
 from ..agent.event_serializer import EventSerializer
-from ..utils.s3_storage import S3StorageService
 from ..utils.content_converter import ContentConverter
 from ..user.auth import get_current_user
 
@@ -121,6 +120,9 @@ async def parse_chat_request_and_add_record(request: Request) -> ChatRequestData
     # Get current user from request state (set by AuthMiddleware)
     current_user = getattr(request.state, 'current_user', None)
     user_id = current_user.get('user_id', '') if current_user else ''
+    if user_id and user_id == 'service_account':
+        user_id = data.get("user_id")
+        agent_owner_id = data.get("agent_owner_id")
     
     # Handle chat record creation or continuation
     if chat_record_id:
@@ -213,17 +215,17 @@ async def process_chat_events(user_id: str, agent_id: str, user_message: str, ch
     :param chat_record_enabled: Whether to save chat responses to the database.
     :yield: Chat events.
     """
-    resp_no = 0
-    async for event in agent_service.stream_chat(user_id, agent_id, user_message):
-        if chat_record_enabled and ("message" in event and "role" in event["message"]):
-            chat_resp = ChatResponse(
-                chat_id=chat_id, 
-                resp_no=resp_no, 
-                content=json.dumps(event), 
-                create_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            )
-            chat_reccord_service.add_chat_response(chat_resp)
-            resp_no += 1
+    # resp_no = 0
+    async for event in agent_service.stream_chat(user_id= user_id, agent_id=agent_id, chat_id=chat_id, user_message=user_message, session_id=chat_id):
+        # if chat_record_enabled and ("message" in event and "role" in event["message"]):
+        #     chat_resp = ChatResponse(
+        #         chat_id=chat_id, 
+        #         resp_no=resp_no, 
+        #         content=json.dumps(event), 
+        #         create_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        #     )
+        #     chat_reccord_service.add_chat_response(chat_resp)
+        #     resp_no += 1
         yield event
 
 @router.post("/stream_chat")

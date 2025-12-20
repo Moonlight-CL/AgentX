@@ -9,8 +9,10 @@ class ScheduleCreate(BaseModel):
 
 class Schedule(BaseModel):
     """Model representing a schedule."""
+    user_id: str
     id: str
     agentId: str
+    agentUserId: Optional[str] = None
     agentName: str
     cronExpression: str
     status: str

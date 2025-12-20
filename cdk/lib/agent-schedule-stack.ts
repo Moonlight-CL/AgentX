@@ -59,6 +59,14 @@ export class AgentScheduleStack extends cdk.Stack {
       console.log(`Using default or environment-provided API endpoint: ${apiEndpoint}`);
     }
 
+    // Get SERVICE_API_KEY from environment variable
+    const serviceApiKey = process.env.SERVICE_API_KEY || '';
+    if (!serviceApiKey) {
+      console.warn('WARNING: SERVICE_API_KEY not provided. Lambda function will not be able to authenticate with the backend API.');
+    } else {
+      console.log('SERVICE_API_KEY configured for Lambda function');
+    }
+
     // Create Lambda function for executing scheduled agent tasks
     const schedulerLambda = new lambda.Function(this, 'AgentScheduleExecutorFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -68,6 +76,7 @@ export class AgentScheduleStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
       environment: {
         API_ENDPOINT: apiEndpoint,
+        SERVICE_API_KEY: serviceApiKey,
         // AWS_REGION: this.region,
       },
     });

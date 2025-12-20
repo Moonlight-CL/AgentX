@@ -29,6 +29,9 @@ const azureClientSecret = app.node.tryGetContext('azureClientSecret') || process
 // JWT Secret Key
 const jwtSecretKey = app.node.tryGetContext('jwtSecretKey') || process.env.JWT_SECRET_KEY;
 
+// Service API Key for Lambda authentication
+const serviceApiKey = app.node.tryGetContext('serviceApiKey') || process.env.SERVICE_API_KEY;
+
 // Create the combined AgentX stack
 new AgentXStack(app, 'AgentXStack', {
   env: { 
@@ -52,6 +55,7 @@ new AgentXStack(app, 'AgentXStack', {
   azureTenantId: azureTenantId,
   azureClientSecret: azureClientSecret,
   jwtSecretKey: jwtSecretKey,
+  serviceApiKey: serviceApiKey,
 });
 
 // Log configuration
@@ -68,3 +72,4 @@ console.log(`S3 bucket name: ${s3BucketName}`);
 console.log(`S3 file prefix: ${s3FilePrefix}`);
 console.log(`Azure AD SSO: ${azureClientId ? 'Enabled' : 'Disabled (username/password only)'}`);
 console.log(`JWT Secret Key: ${jwtSecretKey ? 'Configured' : 'Not configured (will use default)'}`);
+console.log(`Service API Key: ${serviceApiKey ? 'Configured' : 'Not configured (Lambda authentication will fail)'}`);

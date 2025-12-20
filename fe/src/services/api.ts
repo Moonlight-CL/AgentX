@@ -204,6 +204,7 @@ export interface ChatResponse {
 export interface Schedule {
   id: string;
   agentId: string;
+  agentUserId?: string;
   agentName: string;
   cronExpression: string;
   status: string;
@@ -1133,7 +1134,7 @@ export const scheduleAPI = {
   },
 
   // Create a new schedule
-  createSchedule: async (schedule: { agentId: string; cronExpression: string; user_message?: string }): Promise<Schedule> => {
+  createSchedule: async (schedule: { agentId: string; agentUserId: string; cronExpression: string; user_message?: string }): Promise<Schedule> => {
     try {
       const response = await apiAxios.post(SCHEDULE_API.create, schedule);
       return response.data;
@@ -1162,7 +1163,7 @@ export const scheduleAPI = {
   },
 
   // Update an existing schedule
-  updateSchedule: async (schedule: Schedule): Promise<Schedule> => {
+  updateSchedule: async (schedule: Schedule & { agentUserId: string }): Promise<Schedule> => {
     try {
       const response = await apiAxios.put(SCHEDULE_API.update(schedule.id), schedule);
       return response.data;

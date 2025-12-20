@@ -23,6 +23,7 @@ usage() {
   echo "  --azure-tenant-id ID        Azure AD Tenant ID for SSO (optional)"
   echo "  --azure-client-secret SEC   Azure AD Client Secret for SSO (optional)"
   echo "  --jwt-secret-key KEY        JWT Secret Key for token generation (optional, uses default if not provided)"
+  echo "  --service-api-key KEY       Service API Key for Lambda authentication (optional, auto-generated if not provided)"
   echo "  --help                      Display this help message"
   exit 1
 }
@@ -44,6 +45,7 @@ AZURE_CLIENT_ID=""
 AZURE_TENANT_ID=""
 AZURE_CLIENT_SECRET=""
 JWT_SECRET_KEY=""
+SERVICE_API_KEY=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -112,6 +114,10 @@ while [[ $# -gt 0 ]]; do
       JWT_SECRET_KEY="$2"
       shift 2
       ;;
+    --service-api-key)
+      SERVICE_API_KEY="$2"
+      shift 2
+      ;;
     --help)
       usage
       ;;
@@ -150,6 +156,20 @@ if [ -n "$JWT_SECRET_KEY" ]; then
   echo "JWT Secret Key: Custom key provided"
 else
   echo "JWT Secret Key: Using default (not recommended for production)"
+fi
+
+# Generate SERVICE_API_KEY if not provided
+if [ -z "$SERVICE_API_KEY" ]; then
+  echo "SERVICE_API_KEY not provided, generating a new one..."
+  # Generate a 64-character random API key using openssl
+  SERVICE_API_KEY=$(openssl rand -base64 48 | tr -d "=+/" | cut -c1-64)
+  echo "Generated SERVICE_API_KEY: ${SERVICE_API_KEY:0:20}... (truncated for security)"
+  echo "IMPORTANT: Save this key securely. It will be needed for backend configuration."
+  echo "Full key will be saved to .service-api-key file"
+  echo "$SERVICE_API_KEY" > .service-api-key
+  chmod 600 .service-api-key
+else
+  echo "SERVICE_API_KEY: Custom key provided"
 fi
 
 # Bootstrap CDK if not already done
@@ -232,6 +252,14 @@ fi
 if [ -n "$JWT_SECRET_KEY" ]; then
   CDK_PARAMS="$CDK_PARAMS -c jwtSecretKey=$JWT_SECRET_KEY"
 fi
+
+# Add SERVICE_API_KEY as CDK context parameter
+if [ -n "$SERVICE_API_KEY" ]; then
+  CDK_PARAMS="$CDK_PARAMS -c serviceApiKey=$SERVICE_API_KEY"
+fi
+
+# Export SERVICE_API_KEY for CDK
+export SERVICE_API_KEY=$SERVICE_API_KEY
 
 # Export S3 configuration for CDK
 export S3_BUCKET_NAME=$S3_BUCKET_NAME
