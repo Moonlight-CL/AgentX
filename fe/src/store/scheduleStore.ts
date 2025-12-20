@@ -5,6 +5,7 @@ import { scheduleAPI } from '../services/api';
 export interface ScheduleItem {
   id: string;
   agentId: string;
+  agentUserId?: string;
   agentName: string;
   cronExpression: string;
   status: string;
@@ -28,8 +29,8 @@ interface ScheduleState {
   setCreateModalVisible: (visible: boolean) => void;
   setEditModalVisible: (visible: boolean) => void;
   setSelectedSchedule: (schedule: ScheduleItem | null) => void;
-  createSchedule: (schedule: { agentId: string; cronExpression: string; user_message?: string }) => Promise<void>;
-  updateSchedule: (schedule: ScheduleItem) => Promise<void>;
+  createSchedule: (schedule: { agentId: string; agentUserId: string; cronExpression: string; user_message?: string }) => Promise<void>;
+  updateSchedule: (schedule: ScheduleItem & { agentUserId: string }) => Promise<void>;
   deleteSchedule: (id: string) => Promise<void>;
   handleEditSchedule: (schedule: ScheduleItem) => void;
 }
@@ -71,6 +72,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     } catch (error) {
       message.error('创建调度任务失败');
       console.error('Error creating schedule:', error);
+      throw error;
     }
   },
   

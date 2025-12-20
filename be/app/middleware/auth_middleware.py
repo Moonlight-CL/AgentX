@@ -1,5 +1,6 @@
 import os
 import json
+import secrets
 from typing import Optional, Set
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
@@ -41,7 +42,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
         
-        # Extract and validate token
+        # Check for API Key authentication (for service-to-service calls)
+        api_key = self._extract_api_key(request)
+        if api_key:
+            if self._validate_api_key(api_key):
+                # Set a service account user for API key authentication
+                request.state.current_user = {
+                    "user_id": "service_account",
+                    "username": "service_account",
+                    "email": "service@system.internal",
+                    "status": "active"
+                }
+                request.state.is_service_account = True
+                return await call_next(request)
+            else:
+                return self._create_auth_error_response("Invalid API key")
+        
+        # Extract and validate JWT token
         token = self._extract_token(request)
         if not token:
             return self._create_auth_error_response("Missing authentication token")
@@ -54,6 +71,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             
             # Add user info to request state for use in route handlers
             request.state.current_user = user_info
+            request.state.is_service_account = False
             
         except Exception as e:
             # Log the error for debugging (in production, you might want to use proper logging)
@@ -93,6 +111,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Extract token (remove "Bearer " prefix)
         token = authorization[7:]  # len("Bearer ") = 7
         return token if token else None
+    
+    def _extract_api_key(self, request: Request) -> Optional[str]:
+        """
+        Extract API key from X-API-Key header.
+        """
+        return request.headers.get("X-API-Key")
+    
+    def _validate_api_key(self, api_key: str) -> bool:
+        """
+        Validate the API key against configured service keys.
+        In production, this should check against a secure store (e.g., AWS Secrets Manager).
+        """
+        # Get API key from environment variable
+        valid_api_key = os.environ.get("SERVICE_API_KEY")
+        
+        if not valid_api_key:
+            print("Warning: SERVICE_API_KEY not configured")
+            return False
+        
+        # Use constant-time comparison to prevent timing attacks
+        return secrets.compare_digest(api_key, valid_api_key)
     
     def _create_auth_error_response(self, detail: str) -> JSONResponse:
         """

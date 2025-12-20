@@ -100,6 +100,12 @@ export interface AgentXStackProps extends cdk.StackProps {
    * If not provided, a random key will be generated (not recommended for production).
    */
   jwtSecretKey?: string;
+
+  /**
+   * Service API Key for Lambda authentication.
+   * Used by Lambda functions to authenticate with the backend API.
+   */
+  serviceApiKey?: string;
 }
 
 export class AgentXStack extends cdk.Stack {
@@ -340,6 +346,8 @@ export class AgentXStack extends cdk.Stack {
         ...(props?.azureClientSecret && { AZURE_CLIENT_SECRET: props.azureClientSecret }),
         // JWT configuration
         ...(props?.jwtSecretKey && { JWT_SECRET_KEY: props.jwtSecretKey }),
+        // Service API Key for Lambda authentication
+        ...(props?.serviceApiKey && { SERVICE_API_KEY: props.serviceApiKey }),
       },
       portMappings: [
         {
@@ -534,10 +542,11 @@ export class AgentXStack extends cdk.Stack {
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
       
-      // Create DynamoDB table for agent schedules
+      // Create DynamoDB table for agent schedules with user isolation
       const scheduleTable = new cdk.aws_dynamodb.Table(this, 'AgentScheduleTable', {
         tableName: 'AgentScheduleTable',
-        partitionKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        partitionKey: { name: 'user_id', type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: 'id', type: cdk.aws_dynamodb.AttributeType.STRING },
         billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
@@ -992,6 +1001,14 @@ export class AgentXStack extends cdk.Stack {
     let apiEndpoint = process.env.API_ENDPOINT || `http://${loadBalancerDnsName}/api/agent/async_chat`;
     console.log(`Using API endpoint for Lambda: ${apiEndpoint}`);
 
+    // Get SERVICE_API_KEY from stack props
+    const serviceApiKey = this.node.tryGetContext('serviceApiKey') || process.env.SERVICE_API_KEY || '';
+    if (!serviceApiKey) {
+      console.warn('WARNING: SERVICE_API_KEY not provided. Lambda function will not be able to authenticate with the backend API.');
+    } else {
+      console.log('SERVICE_API_KEY configured for Lambda function');
+    }
+
     // Create Lambda function for executing scheduled agent tasks
     const schedulerLambda = new lambda.Function(this, 'AgentScheduleExecutorFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -1001,6 +1018,7 @@ export class AgentXStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
       environment: {
         API_ENDPOINT: apiEndpoint,
+        SERVICE_API_KEY: serviceApiKey,
       },
     });
 

@@ -2,6 +2,9 @@
 !jest.config.js
 *.d.ts
 node_modules
+
+# Service API Key (contains sensitive data)
+.service-api-key
 .cdk.staging
 cdk.out
 .env

@@ -47,6 +47,7 @@ class Tools(Enum):
     
     agentCoreBrowser = "Browser", "browser.AgentCoreBrowser.browser","Interact with web browsers, take screenshots, and perform web automation"
     agentCodeInterpreter = "Code", "code_interpreter.AgentCoreCodeInterpreter.code_interpreter","Perform code execution, data analysis, and file operations using the Code Interpreter tool"
+    agentCoreMemory = "Memory", "agent_core_memory.AgentCoreMemoryToolProvider.tools","Provide memory management capabilities for agents using Bedrock AgentCore Memory service"
 
 
     def __init__(self, category: str, identify:str, desc: str):
@@ -294,26 +295,6 @@ class AgentPOService:
         table = self.dynamodb.Table(self.dynamodb_table_name)
         user_groups = user_groups or []
 
-        # Get user's own agents
-        # user_agents = []
-        # response = table.query(
-        #     KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(user_id),
-        #     Limit=100,
-        # )
-        # user_agents.extend(response.get("Items", []))
-
-        # Get public agents
-        # public_agents = []
-        # response = table.query(
-        #     KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
-        #         "public"
-        #     ),
-        #     Limit=100,
-        # )
-        # public_agents.extend(response.get("Items", []))
-
-        # Scan for shared agents (this is expensive but necessary for sharing functionality)
-        # In production, you might want to add a GSI for better performance
         all_agents = []
         try:
             # Scan all agents to find those shared with this user or their groups
@@ -353,19 +334,6 @@ class AgentPOService:
         except Exception as e:
             print(f"Error scanning for shared agents: {e}")
 
-        # Combine all agents and remove duplicates
-        # all_items = user_agents + public_agents + all_agents
-        # seen_ids = set()
-        # unique_items = []
-
-        # for item in all_items:
-        #     agent_id = item["id"]
-        #     if agent_id not in seen_ids:
-        #         seen_ids.add(agent_id)
-        #         unique_items.append(item)
-
-        # if unique_items:
-        #     return [self._map_agent_item(item) for item in unique_items]
         if all_agents:
             ret_agents = sorted([self._map_agent_item(item) for item in all_agents], key=lambda a: (a.name or "").lower())
             return ret_agents
@@ -502,7 +470,7 @@ class AgentPOService:
         
         return sharing_info, ""
     
-    async def stream_chat(self, user_id: str, agent_id: str, user_message: str):
+    async def stream_chat(self, user_id: str, agent_id: str, chat_id: str, user_message: str, **kwargs):
         """
         Stream chat messages from an agent.
 
@@ -514,8 +482,10 @@ class AgentPOService:
         agent = self.get_agent(user_id, agent_id)
         if not agent:
             raise ValueError(f"Agent with ID {agent_id} not found.")
+        if kwargs and 'session_id' in kwargs:
+            kwargs.pop('session_id')
     
-        agent_instance = self.build_strands_agent(agent)
+        agent_instance = self.build_strands_agent_with_session(agent=agent, session_id=chat_id, **kwargs)
 
         # Stream the chat response
         async for message in agent_instance.stream_async(user_message):
@@ -606,7 +576,7 @@ class AgentPOService:
         
         agent_id = f"{agent.id}_{session_id}"
         # Build the agent with session manager
-        agent_instance = self.build_strands_agent(agent, agent_id = agent_id, session_manager=session_manager, **kwargs)
+        agent_instance = self.build_strands_agent(agent, session_id=session_id, agent_id = agent_id, session_manager=session_manager, **kwargs)
         
         # Set agent_id for session management
         # agent_instance.agent_id = f"{agent.id}_{session_id}"
@@ -644,7 +614,18 @@ class AgentPOService:
                 print(f"{key}, val: {val}")
                 if val:
                     params['identifier'] = val
- 
+            elif cls_name == 'AgentCoreMemoryToolProvider':
+                memory_id_key = f"{prefix}_memory_id"
+                memory_ns_key = f"{prefix}_memory_namespace"
+                memory_id_val = os.environ.get(memory_id_key)
+                if not memory_id_val:
+                    raise ValueError(f"Environment variable {memory_id_key} not set for memory tool")
+                memory_ns_val = os.environ.get(memory_ns_key, "default")
+                params['memory_id'] = memory_id_val
+                params['namespace'] = memory_ns_val
+                params['actor_id'] = kwargs.get('user_id', 'default_user')
+                params['session_id'] = kwargs.get('session_id')
+
             return params
 
 
@@ -802,6 +783,8 @@ class AgentPOService:
         # Remove user_id from kwargs as Agent doesn't accept it
         if 'user_id' in kwargs:
             kwargs.pop('user_id')
+        if 'session_id' in kwargs:
+            kwargs.pop('session_id')
 
         from strands.agent.conversation_manager import SlidingWindowConversationManager
         conversation_Manager = SlidingWindowConversationManager(window_size = 100)

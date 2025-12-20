@@ -15,6 +15,7 @@ import {
   EditOutlined, 
   DeleteOutlined 
 } from '@ant-design/icons';
+import { isValidCron } from 'cron-validator';
 import { useAgentStore } from '../../store/agentStore';
 import { useScheduleStore } from '../../store/scheduleStore';
 import type { Agent } from '../../services/api';
@@ -25,6 +26,7 @@ const { Option } = Select;
 interface ScheduleItem {
   id: string;
   agentId: string;
+  agentUserId?: string;
   agentName: string;
   cronExpression: string;
   status: string;
@@ -68,8 +70,10 @@ export const Schedule: React.FC = () => {
   // Set edit form values when selected schedule changes
   useEffect(() => {
     if (selectedSchedule && editModalVisible) {
+      // Construct composite key for the select value
+      const compositeKey = `${selectedSchedule.agentUserId || 'public'}#${selectedSchedule.agentId}`;
       editForm.setFieldsValue({
-        agentId: selectedSchedule.agentId,
+        agentId: compositeKey,
         cronExpression: selectedSchedule.cronExpression,
         user_message: selectedSchedule.user_message
       });
@@ -78,7 +82,23 @@ export const Schedule: React.FC = () => {
 
   // Handle create schedule form submission
   const handleCreateSchedule = async (values: { agentId: string; cronExpression: string; user_message?: string }) => {
-    await createSchedule(values);
+    // Parse the composite key (creator#agentId)
+    const [agentUserId, agentId] = values.agentId.split('#');
+    
+    if (!agentUserId || !agentId) {
+      Modal.error({
+        title: '错误',
+        content: '无效的Agent选择'
+      });
+      return;
+    }
+    
+    await createSchedule({
+      agentId,
+      agentUserId,
+      cronExpression: values.cronExpression,
+      user_message: values.user_message
+    });
     form.resetFields();
   };
 
@@ -92,11 +112,23 @@ export const Schedule: React.FC = () => {
   const handleUpdateSchedule = async (values: { agentId: string; cronExpression: string; user_message?: string }) => {
     if (!selectedSchedule) return;
     
+    // Parse the composite key (creator#agentId)
+    const [agentUserId, agentId] = values.agentId.split('#');
+    
+    if (!agentUserId || !agentId) {
+      Modal.error({
+        title: '错误',
+        content: '无效的Agent选择'
+      });
+      return;
+    }
+    
     await updateSchedule({
       ...selectedSchedule,
-      agentId: values.agentId,
+      agentId,
+      agentUserId,
       cronExpression: values.cronExpression,
-      user_message: values.user_message,
+      user_message: values.user_message
     });
     
     editForm.resetFields();
@@ -180,10 +212,16 @@ export const Schedule: React.FC = () => {
         label="选择Agent"
         rules={[{ required: true, message: '请选择Agent' }]}
       >
-        <Select placeholder="选择要调度的Agent">
-          {agents.map((agent: Agent) => (
-            <Option key={agent.id} value={agent.id}>{agent.display_name}</Option>
-          ))}
+        <Select placeholder="选择要调度的Agent" showSearch optionFilterProp="children">
+          {agents.map((agent: Agent) => {
+            // Create composite key: creator#agentId
+            const compositeKey = `${agent.creator || 'public'}#${agent.id}`;
+            return (
+              <Option key={compositeKey} value={compositeKey}>
+                {agent.display_name}
+              </Option>
+            );
+          })}
         </Select>
       </Form.Item>
       
@@ -192,14 +230,42 @@ export const Schedule: React.FC = () => {
         label="Cron表达式"
         rules={[
           { required: true, message: '请输入Cron表达式' },
-          { 
-            pattern: /^(\*|([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])|\*\/([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])) (\*|([0-9]|1[0-9]|2[0-3])|\*\/([0-9]|1[0-9]|2[0-3])) (\*|\?|([1-9]|1[0-9]|2[0-9]|3[0-1])|\*\/([1-9]|1[0-9]|2[0-9]|3[0-1])) (\*|([1-9]|1[0-2])|\*\/([1-9]|1[0-2])) (\*|\?|([0-6])|\*\/([0-6]))$/,
-            message: 'Cron表达式格式不正确'
+          {
+            validator: (_, value) => {
+              if (!value) {
+                return Promise.resolve();
+              }
+              
+              const parts = value.trim().split(/\s+/);
+              
+              // Check if it has exactly 5 parts
+              if (parts.length !== 5) {
+                return Promise.reject(new Error('Cron表达式必须包含5个字段: 分 时 日 月 周'));
+              }
+              
+              // Check if either day-of-month or day-of-week is '?'
+              if (parts[2] !== '?' && parts[4] !== '?') {
+                return Promise.reject(new Error('日字段或周字段必须有一个为 ?'));
+              }
+              
+              // Validate using cron-validator
+              const isValid = isValidCron(value, { 
+                alias: true,
+                allowBlankDay: true,
+                allowSevenAsSunday: true
+              });
+              
+              if (!isValid) {
+                return Promise.reject(new Error('Cron表达式格式不正确'));
+              }
+              
+              return Promise.resolve();
+            }
           }
         ]}
-        help="格式: 分 时 日 月 周 (例如: '0 8 ? * 1' 表示每周一上午8点，日字段必须为?)"
+        help="格式: 分 时 日 月 周。支持: * (任意), ? (不指定), */n (步长), n-m (范围), n,m (列表)。例如: '0 8 ? * 1' (每周一8点), '*/5 * ? * *' (每5分钟), '0 9-17 ? * 1-5' (工作日9-17点)"
       >
-        <Input placeholder="例如: 0 8 ? * 1" />
+        <Input placeholder="例如: 0 8 ? * 1 或 */5 * ? * * 或 0 9-17 ? * 1-5" />
       </Form.Item>
       
       <Form.Item
@@ -224,10 +290,16 @@ export const Schedule: React.FC = () => {
         label="选择Agent"
         rules={[{ required: true, message: '请选择Agent' }]}
       >
-        <Select placeholder="选择要调度的Agent">
-          {agents.map((agent: Agent) => (
-            <Option key={agent.id} value={agent.id}>{agent.display_name}</Option>
-          ))}
+        <Select placeholder="选择要调度的Agent" showSearch optionFilterProp="children">
+          {agents.map((agent: Agent) => {
+            // Create composite key: creator#agentId
+            const compositeKey = `${agent.creator || 'public'}#${agent.id}`;
+            return (
+              <Option key={compositeKey} value={compositeKey}>
+                {agent.display_name}
+              </Option>
+            );
+          })}
         </Select>
       </Form.Item>
       
@@ -236,14 +308,42 @@ export const Schedule: React.FC = () => {
         label="Cron表达式"
         rules={[
           { required: true, message: '请输入Cron表达式' },
-          { 
-            pattern: /^(\*|([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])|\*\/([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])) (\*|([0-9]|1[0-9]|2[0-3])|\*\/([0-9]|1[0-9]|2[0-3])) (\*|\?|([1-9]|1[0-9]|2[0-9]|3[0-1])|\*\/([1-9]|1[0-9]|2[0-9]|3[0-1])) (\*|([1-9]|1[0-2])|\*\/([1-9]|1[0-2])) (\*|\?|([0-6])|\*\/([0-6]))$/,
-            message: 'Cron表达式格式不正确'
+          {
+            validator: (_, value) => {
+              if (!value) {
+                return Promise.resolve();
+              }
+              
+              const parts = value.trim().split(/\s+/);
+              
+              // Check if it has exactly 5 parts
+              if (parts.length !== 5) {
+                return Promise.reject(new Error('Cron表达式必须包含5个字段: 分 时 日 月 周'));
+              }
+              
+              // Check if either day-of-month or day-of-week is '?'
+              if (parts[2] !== '?' && parts[4] !== '?') {
+                return Promise.reject(new Error('日字段或周字段必须有一个为 ?'));
+              }
+              
+              // Validate using cron-validator
+              const isValid = isValidCron(value, { 
+                alias: true,
+                allowBlankDay: true,
+                allowSevenAsSunday: true
+              });
+              
+              if (!isValid) {
+                return Promise.reject(new Error('Cron表达式格式不正确'));
+              }
+              
+              return Promise.resolve();
+            }
           }
         ]}
-        help="格式: 分 时 日 月 周 (例如: '0 8 ? * 1' 表示每周一上午8点，日字段必须为?)"
+        help="格式: 分 时 日 月 周。支持: * (任意), ? (不指定), */n (步长), n-m (范围), n,m (列表)。例如: '0 8 ? * 1' (每周一8点), '*/5 * ? * *' (每5分钟), '0 9-17 ? * 1-5' (工作日9-17点)"
       >
-        <Input placeholder="例如: 0 8 ? * 1" />
+        <Input placeholder="例如: 0 8 ? * 1 或 */5 * ? * * 或 0 9-17 ? * 1-5" />
       </Form.Item>
       
       <Form.Item
