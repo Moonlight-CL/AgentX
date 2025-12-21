@@ -245,7 +245,43 @@ export const MCP: React.FC = () => {
       >
         <Input placeholder="例如: http://localhost:8001" />
       </Form.Item>
-      
+
+      <div style={{ 
+        borderTop: '1px solid #d9d9d9', 
+        marginTop: '24px', 
+        paddingTop: '24px' 
+      }}>
+        <div style={{ 
+          marginBottom: '16px', 
+          fontSize: '14px', 
+          fontWeight: 500,
+          color: 'rgba(0, 0, 0, 0.85)'
+        }}>
+          OAuth 客户端凭证模式认证 (可选)
+        </div>
+        
+        <Form.Item
+          name="client_id"
+          label="Client ID"
+        >
+          <Input placeholder="OAuth客户端ID" />
+        </Form.Item>
+        
+        <Form.Item
+          name="client_secret"
+          label="Client Secret"
+        >
+          <Input.Password placeholder="OAuth客户端密钥" />
+        </Form.Item>
+        
+        <Form.Item
+          name="token_url"
+          label="Token URL"
+        >
+          <Input placeholder="例如: https://auth.example.com/oauth/token" />
+        </Form.Item>
+      </div>
+
       <Form.Item
         name="headers"
         label="请求头 (JSON格式)"
@@ -268,6 +304,7 @@ export const MCP: React.FC = () => {
           placeholder='例如: {"Authorization": "Bearer token123"}' 
         />
       </Form.Item>
+      
     </Form>
   );
   
@@ -381,7 +418,43 @@ export const MCP: React.FC = () => {
             >
               <Input placeholder="例如: http://localhost:8001" />
             </Form.Item>
-            
+
+            <div style={{ 
+              borderTop: '1px solid #d9d9d9', 
+              marginTop: '24px', 
+              paddingTop: '24px' 
+            }}>
+              <div style={{ 
+                marginBottom: '16px', 
+                fontSize: '14px', 
+                fontWeight: 500,
+                color: 'rgba(0, 0, 0, 0.85)'
+              }}>
+                OAuth 客户端凭证模式认证 (可选)
+              </div>
+              
+              <Form.Item
+                name="client_id"
+                label="Client ID"
+              >
+                <Input placeholder="OAuth客户端ID" />
+              </Form.Item>
+              
+              <Form.Item
+                name="client_secret"
+                label="Client Secret"
+              >
+                <Input.Password placeholder="OAuth客户端密钥" />
+              </Form.Item>
+              
+              <Form.Item
+                name="token_url"
+                label="Token URL"
+              >
+                <Input placeholder="例如: https://auth.example.com/oauth/token" />
+              </Form.Item>
+            </div>
+
             <Form.Item
               name="headers"
               label="请求头 (JSON格式)"
@@ -404,6 +477,7 @@ export const MCP: React.FC = () => {
                 placeholder='例如: {"Authorization": "Bearer token123"}' 
               />
             </Form.Item>
+            
           </Form>
         </Modal>
         

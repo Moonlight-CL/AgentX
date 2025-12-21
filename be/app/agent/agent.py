@@ -1,6 +1,7 @@
 import boto3, uuid
 import importlib
 import json
+import httpx
 
 from boto3.dynamodb.conditions import Attr
 from strands import Agent, tool
@@ -176,6 +177,45 @@ class AgentPOBuilder:
     def build(self) -> AgentPO:
         return self._agent_po
 
+
+
+def fetch_oauth_access_token(client_id: str, client_secret: str, token_url: str) -> str:
+    """
+    Fetch OAuth access token using Client Credentials Flow.
+    
+    :param client_id: OAuth client ID
+    :param client_secret: OAuth client secret
+    :param token_url: Token endpoint URL
+    :return: Access token string
+    :raises: Exception if token fetch fails
+    """
+    try:
+        print(f"[OAuth] Fetching access token from {token_url}")
+        
+        response = httpx.post(
+            token_url,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=30.0
+        )
+        
+        response.raise_for_status()
+        token_data = response.json()
+        access_token = token_data.get("access_token")
+        
+        if not access_token:
+            raise ValueError("No access_token in response")
+        
+        print(f"[OAuth] Successfully obtained access token")
+        return access_token
+        
+    except Exception as e:
+        print(f"[OAuth] Error fetching access token: {e}")
+        raise Exception(f"Failed to fetch OAuth access token: {e}")
 
 
 class AgentPOService:
@@ -711,10 +751,42 @@ class AgentPOService:
                     # Regular MCP server
                     print(f"[MCP] Initializing MCP client for {t.name}")
                     print(f"[MCP] URL: {t.mcp_server_url}")
-                    print(f"[MCP] Headers: {t.mcp_server_headers}")
+                    
+                    # Get MCP server configuration to check for OAuth settings
+                    mcp_service = MCPService()
+                    user_id = kwargs.get('user_id', 'public')
+                    mcp_servers = mcp_service.list_mcp_servers(user_id)
+                    
+                    # Find the matching MCP server by URL
+                    mcp_server = None
+                    for server in mcp_servers:
+                        if server.host == t.mcp_server_url:
+                            mcp_server = server
+                            break
+                    
+                    # Prepare headers
+                    headers = t.mcp_server_headers.copy() if t.mcp_server_headers else {}
+                    
+                    # Check if OAuth is configured
+                    if mcp_server and mcp_server.client_id and mcp_server.client_secret and mcp_server.token_url:
+                        try:
+                            print(f"[MCP] OAuth configured for {t.name}, fetching access token")
+                            access_token = fetch_oauth_access_token(
+                                mcp_server.client_id,
+                                mcp_server.client_secret,
+                                mcp_server.token_url
+                            )
+                            # Add authorization header with Bearer token
+                            headers['authorization'] = f"Bearer {access_token}"
+                            print(f"[MCP] OAuth token added to headers")
+                        except Exception as e:
+                            print(f"[MCP] Failed to fetch OAuth token for {t.name}: {e}")
+                            # Continue without OAuth if token fetch fails
+                    
+                    print(f"[MCP] Headers: {bool(headers)}")
                     
                     streamable_http_mcp_client = MCPClient(
-                        lambda: streamablehttp_client(t.mcp_server_url, headers=t.mcp_server_headers)
+                        lambda: streamablehttp_client(t.mcp_server_url, headers=headers if headers else None)
                     )
                     streamable_http_mcp_client = streamable_http_mcp_client.start()
                     tools.extend(streamable_http_mcp_client.list_tools_sync())
