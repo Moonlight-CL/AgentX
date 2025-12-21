@@ -10,6 +10,10 @@ class HttpMCPServer(BaseModel):
    desc: str
    host: str
    headers: dict[str, str] | None = None
+   # OAuth Client Credentials Flow fields
+   client_id: str | None = None
+   client_secret: str | None = None
+   token_url: str | None = None
 
 
 class MCPService:
@@ -39,6 +43,13 @@ class MCPService:
         }
         if server.headers:
             item['headers'] = server.headers
+        # Add OAuth fields if present
+        if server.client_id:
+            item['client_id'] = server.client_id
+        if server.client_secret:
+            item['client_secret'] = server.client_secret
+        if server.token_url:
+            item['token_url'] = server.token_url
         self.mcp_table.put_item(Item=item)
 
     def list_mcp_servers(self, user_id: str) -> list[HttpMCPServer]:
