@@ -179,26 +179,34 @@ class AgentPOBuilder:
 
 
 
-def fetch_oauth_access_token(client_id: str, client_secret: str, token_url: str) -> str:
+def fetch_oauth_access_token(client_id: str, client_secret: str, token_url: str, scope: str | None = None) -> str:
     """
     Fetch OAuth access token using Client Credentials Flow.
     
     :param client_id: OAuth client ID
     :param client_secret: OAuth client secret
     :param token_url: Token endpoint URL
+    :param scope: Optional OAuth scope
     :return: Access token string
     :raises: Exception if token fetch fails
     """
     try:
         print(f"[OAuth] Fetching access token from {token_url}")
         
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret
+        }
+        
+        # Add scope if provided
+        if scope:
+            data["scope"] = scope
+            print(f"[OAuth] Using scope: {scope}")
+        
         response = httpx.post(
             token_url,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret
-            },
+            data=data,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=30.0
         )
@@ -774,7 +782,8 @@ class AgentPOService:
                             access_token = fetch_oauth_access_token(
                                 mcp_server.client_id,
                                 mcp_server.client_secret,
-                                mcp_server.token_url
+                                mcp_server.token_url,
+                                mcp_server.scope
                             )
                             # Add authorization header with Bearer token
                             headers['authorization'] = f"Bearer {access_token}"
