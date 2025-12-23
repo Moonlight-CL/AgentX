@@ -14,6 +14,7 @@ class HttpMCPServer(BaseModel):
    client_id: str | None = None
    client_secret: str | None = None
    token_url: str | None = None
+   scope: str | None = None
 
 
 class MCPService:
@@ -50,6 +51,8 @@ class MCPService:
             item['client_secret'] = server.client_secret
         if server.token_url:
             item['token_url'] = server.token_url
+        if server.scope:
+            item['scope'] = server.scope
         self.mcp_table.put_item(Item=item)
 
     def list_mcp_servers(self, user_id: str) -> list[HttpMCPServer]:

@@ -69,6 +69,7 @@ async def create_mcp_server(server: Request, current_user: dict = Depends(get_cu
         client_id=server_data.get("client_id"),
         client_secret=server_data.get("client_secret"),
         token_url=server_data.get("token_url"),
+        scope=server_data.get("scope"),
     )
     mcp_service.add_mcp_server(server, user_id)
     return server

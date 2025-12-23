@@ -280,6 +280,13 @@ export const MCP: React.FC = () => {
         >
           <Input placeholder="例如: https://auth.example.com/oauth/token" />
         </Form.Item>
+        
+        <Form.Item
+          name="scope"
+          label="Scope"
+        >
+          <Input placeholder="例如: read write" />
+        </Form.Item>
       </div>
 
       <Form.Item
@@ -452,6 +459,13 @@ export const MCP: React.FC = () => {
                 label="Token URL"
               >
                 <Input placeholder="例如: https://auth.example.com/oauth/token" />
+              </Form.Item>
+              
+              <Form.Item
+                name="scope"
+                label="Scope"
+              >
+                <Input placeholder="例如: read write" />
               </Form.Item>
             </div>
 
