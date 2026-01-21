@@ -1,0 +1,25 @@
+# Dockerfile for AWS AgentCore Runtime Deployment
+# This Dockerfile builds an ARM64-compatible image for AgentCore Runtime
+
+# Use ARM64 Python base image as required by AgentCore
+FROM --platform=linux/arm64 python:3.13-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install uv package manager
+RUN pip install --no-cache-dir uv
+
+# Copy project files
+COPY pyproject.toml README.md ./
+COPY app/ ./app/
+
+# Install dependencies using uv
+RUN uv sync
+
+# Expose port 8080 (AgentCore Runtime default)
+EXPOSE 8080
+
+# Run application on port 8080
+# AgentCore Runtime expects the service to run on port 8080
+CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "asyncio"]

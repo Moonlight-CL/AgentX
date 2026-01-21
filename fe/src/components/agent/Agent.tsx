@@ -20,7 +20,7 @@ import {
   DeleteOutlined,
   ShareAltOutlined
 } from '@ant-design/icons';
-import { AGENT_TYPES, TOOL_TYPES } from '../../services/api';
+import { AGENT_TYPES, TOOL_TYPES, AGENT_RUNTIME } from '../../services/api';
 import type { Agent, Tool } from '../../services/api';
 import { useAgentStore } from '../../store/agentStore';
 import { useModelProviders, type ModelConfig } from '../../hooks/useModelProviders';
@@ -96,6 +96,7 @@ export const AgentManager: React.FC = () => {
       // Set initial values after providers are loaded
       createForm.setFieldsValue({
         agent_type: AGENT_TYPES.PLAIN,
+        runtime: AGENT_RUNTIME.LOCAL,
         model_provider: getProviderNumber(providers[0].key),
         model_id: providers[0].models.length > 0 ? providers[0].models[0].config.model_id : 'Custom',
         tools: [],
@@ -450,6 +451,7 @@ export const AgentManager: React.FC = () => {
       onValuesChange={(changedValues) => handleFormValuesChange(changedValues, createForm)}
       initialValues={{
         agent_type: AGENT_TYPES.PLAIN,
+        runtime: AGENT_RUNTIME.LOCAL,
         model_provider: providers.length > 0 ? getProviderNumber(providers[0].key) : 1,
         model_id: providers.length > 0 && providers[0].models.length > 0 ? providers[0].models[0].config.model_id : 'Custom',
         tools: [],
@@ -498,7 +500,19 @@ export const AgentManager: React.FC = () => {
           <Option value={AGENT_TYPES.ORCHESTRATOR}>Orchestrator</Option>
         </Select>
       </Form.Item>
-      
+
+      <Form.Item
+        name="runtime"
+        label="运行时环境"
+        rules={[{ required: true, message: '请选择运行时环境' }]}
+        tooltip="选择Agent的运行环境。Local: 在当前部署环境运行; AgentCore: 在AWS AgentCore Runtime运行(使用CDK部署的统一Runtime)"
+      >
+        <Select>
+          <Option value={AGENT_RUNTIME.LOCAL}>Local (本地运行)</Option>
+          <Option value={AGENT_RUNTIME.AGENTCORE}>AgentCore (AWS AgentCore Runtime)</Option>
+        </Select>
+      </Form.Item>
+
       <Form.Item
         name="model_provider"
         label="Model Provider"
@@ -806,7 +820,19 @@ export const AgentManager: React.FC = () => {
                 <Option value={AGENT_TYPES.ORCHESTRATOR}>Orchestrator</Option>
               </Select>
             </Form.Item>
-            
+
+            <Form.Item
+              name="runtime"
+              label="运行时环境"
+              rules={[{ required: true, message: '请选择运行时环境' }]}
+              tooltip="选择Agent的运行环境。Local: 在当前部署环境运行; AgentCore: 在AWS AgentCore Runtime运行(使用CDK部署的统一Runtime)"
+            >
+              <Select>
+                <Option value={AGENT_RUNTIME.LOCAL}>Local (本地运行)</Option>
+                <Option value={AGENT_RUNTIME.AGENTCORE}>AgentCore (AWS AgentCore Runtime)</Option>
+              </Select>
+            </Form.Item>
+
             <Form.Item
               name="model_provider"
               label="Model Provider"

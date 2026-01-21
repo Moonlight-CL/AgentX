@@ -1,15 +1,18 @@
 from datetime import datetime
 import uuid
 import json
+import boto3
+import os
 from dataclasses import dataclass
 
 from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import List, Dict, Optional, AsyncGenerator
-from ..agent.agent import AgentPO, AgentType, ModelProvider, AgentTool, AgentPOService, ChatRecord, ChatResponse, ChatRecordService
+from ..agent.agent import AgentPO, AgentType, ModelProvider, AgentTool, AgentRuntime, AgentPOService, ChatRecord, ChatRecordService
 from ..agent.event_serializer import EventSerializer
 from ..utils.content_converter import ContentConverter
 from ..user.auth import get_current_user
+from ..utils.aws_config import get_aws_region
 
 @dataclass
 class ChatRequestData:
@@ -33,6 +36,89 @@ router = APIRouter(
     tags=["agent"],
     responses={404: {"description": "Not found"}}
 )
+
+async def invoke_agentcore_runtime(
+    agent: AgentPO,
+    user_message: str,
+    session_id: str,
+    user_id: str,
+    file_attachments: Optional[List[Dict]] = None,
+    use_s3_reference: bool = False,
+    agent_owner_id: Optional[str] = None,
+    chat_record_enabled: bool = True
+) -> AsyncGenerator[Dict, None]:
+    """
+    Invoke an agent running on AgentCore Runtime.
+
+    :param agent: The AgentPO object containing agent configuration.
+    :param user_message: The user's message.
+    :param session_id: The session ID.
+    :param user_id: The user ID.
+    :param file_attachments: Optional file attachments.
+    :param use_s3_reference: Whether to use S3 references.
+    :param agent_owner_id: Optional agent owner ID for shared agents.
+    :yield: Chat events in the same format as local execution.
+    """
+    # Get AgentCore Runtime ARN from environment variable
+    agentcore_runtime_arn = os.environ.get('AGENTCORE_RUNTIME_ARN')
+    if not agentcore_runtime_arn:
+        raise ValueError("AGENTCORE_RUNTIME_ARN environment variable is not set")
+
+    try:
+        # Create boto3 client for AgentCore
+        aws_region = get_aws_region()
+        client = boto3.client('bedrock-agentcore', region_name=aws_region)
+
+        # Prepare payload for AgentCore invocation
+        payload = {
+            "input": {
+                "agent_id": agent.id,
+                "prompt": user_message,
+                "session_id": session_id,
+                "user_id": user_id,
+                "chat_record_enabled": chat_record_enabled,
+                "agent_owner_id": agent_owner_id
+            }
+        }
+
+        if file_attachments:
+            payload["input"]["file_attachments"] = file_attachments
+            payload["input"]["use_s3_reference"] = use_s3_reference
+
+        # Invoke AgentCore Runtime using ARN from environment variable
+        response = client.invoke_agent_runtime(
+            agentRuntimeArn=agentcore_runtime_arn,
+            runtimeSessionId=session_id,
+            payload=json.dumps(payload),
+            qualifier="DEFAULT"
+        )
+
+        if "text/event-stream" in response.get("contentType", ""):
+            # Handle streaming response
+            for line in response["response"].iter_lines(chunk_size=10):
+                if line:
+                    line = line.decode("utf-8")
+                    if line.startswith("data: "):
+                        line = line[6:]
+                        event_data = json.loads(line)
+                        yield event_data
+        elif response.get("contentType") == "application/json":
+            for chunk in response.get("response", []):
+                chunk_data = chunk.decode('utf-8')
+                event_data = json.loads(chunk_data)
+                yield event_data
+
+    except Exception as e:
+        print(f"Error invoking AgentCore Runtime: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        # Yield an error event
+        yield {
+            "type": "error",
+            "error": {
+                "message": f"Failed to invoke AgentCore Runtime: {str(e)}"
+            }
+        }
 
 @router.get("/list")
 def list_agents(current_user: dict = Depends(get_current_user)) -> List[AgentPO]:
@@ -85,6 +171,10 @@ async def create_agent(request: Request, current_user: dict = Depends(get_curren
     if agent.get("tools"):
         tools = [t for tool in agent["tools"] if (t:= AgentTool.model_validate(tool)) is not None]
 
+    # Handle runtime field with default value
+    runtime_value = agent.get("runtime", 1)  # Default to local (1)
+    runtime = AgentRuntime(runtime_value) if runtime_value else AgentRuntime.local
+
     agent_po = AgentPO(
         id= agent_id,
         name=agent.get("name"),
@@ -97,6 +187,7 @@ async def create_agent(request: Request, current_user: dict = Depends(get_curren
         tools= tools,
         envs=agent.get("envs", ""),
         extras=agent.get("extras"),
+        runtime=runtime,
     )
     agent_service.add_agent(agent_po, user_id)
     return agent_po
@@ -125,6 +216,7 @@ async def parse_chat_request_and_add_record(request: Request) -> ChatRequestData
         agent_owner_id = data.get("agent_owner_id")
     
     # Handle chat record creation or continuation
+    chat_id = chat_record_id
     if chat_record_id:
         # Check if the chat record exists
         existing_record = chat_reccord_service.get_chat_record(user_id, chat_record_id)
@@ -132,9 +224,8 @@ async def parse_chat_request_and_add_record(request: Request) -> ChatRequestData
             # Use existing chat record ID as session ID
             chat_id = chat_record_id
         else:
-            # Chat record doesn't exist, create a new one
-            chat_id = uuid.uuid4().hex
             if chat_record_enabled:
+                chat_id =  f"{uuid.uuid4().hex}{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 chat_record = ChatRecord(
                     id=chat_id, 
@@ -144,9 +235,10 @@ async def parse_chat_request_and_add_record(request: Request) -> ChatRequestData
                     create_time=current_time
                 )
                 chat_reccord_service.add_chat_record(chat_record)
+
     else:
         # Create a new chat record
-        chat_id = uuid.uuid4().hex
+        chat_id = f"{uuid.uuid4().hex}{datetime.now().strftime('%Y%m%d%H%M%S')}"
         if chat_record_enabled:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             chat_record = ChatRecord(
@@ -169,10 +261,11 @@ async def parse_chat_request_and_add_record(request: Request) -> ChatRequestData
         agent_owner_id=agent_owner_id
     )
 
-async def process_chat_events_with_session(user_id: str, agent_id: str, user_input: str, chat_id: str, file_attachments: Optional[List[Dict]] = None, chat_record_enabled: bool = True, use_s3_reference: bool = False, agent_owner_id: Optional[str] = None) -> AsyncGenerator[Dict, None]:
+async def process_chat_events_with_session(user_id: str, agent_id: str, user_input: str, chat_id: str, file_attachments: Optional[List[Dict]] = None, chat_record_enabled: bool = True, use_s3_reference: bool = False, agent_owner_id: Optional[str] = None, running_in_agentcore: bool = False) -> AsyncGenerator[Dict, None]:
     """
     Process chat events using session management. Chat content is automatically stored in ChatSessionTable via DynamoDBSessionRepository.
-    
+    Routes to either local Strands agent execution or AgentCore Runtime based on agent configuration.
+
     :param user_id: The user ID for data isolation.
     :param agent_id: The ID of the agent to chat with.
     :param user_input: The user's message or content blocks to process.
@@ -188,21 +281,39 @@ async def process_chat_events_with_session(user_id: str, agent_id: str, user_inp
     agent = agent_service.get_agent(lookup_user_id, agent_id)
     if not agent:
         raise ValueError(f"Agent with ID {agent_id} not found.")
-    
-    # Build agent with session management using chat_id as session_id
-    agent_instance = agent_service.build_strands_agent_with_session(agent, chat_id, user_id=user_id)
-    
-    # Convert text and files to content blocks if files are present
-    if file_attachments:
-        content_converter = ContentConverter()
-        content_blocks = content_converter.create_content_blocks(user_input, file_attachments, use_s3_reference)
-        # Stream events with content blocks
-        async for event in agent_instance.stream_async(content_blocks):
+
+    # Check runtime type and route accordingly
+    if agent.runtime == AgentRuntime.agentcore and not running_in_agentcore:
+        # Route to AgentCore Runtime
+        print(f"Routing agent {agent_id} to AgentCore Runtime")
+        async for event in invoke_agentcore_runtime(
+            agent=agent,
+            user_message=user_input,
+            session_id=chat_id,
+            user_id=user_id,
+            file_attachments=file_attachments,
+            use_s3_reference=use_s3_reference,
+            agent_owner_id=agent_owner_id,
+            chat_record_enabled=chat_record_enabled
+        ):
             yield event
     else:
-        # Stream events with plain text - session management automatically handles message storage
-        async for event in agent_instance.stream_async(user_input):
-            yield event
+        # Local execution with Strands agent
+        print(f"Routing agent {agent_id} to local Strands runtime")
+        # Build agent with session management using chat_id as session_id
+        agent_instance = agent_service.build_strands_agent_with_session(agent, chat_id, user_id=user_id)
+
+        # Convert text and files to content blocks if files are present
+        if file_attachments:
+            content_converter = ContentConverter()
+            content_blocks = content_converter.create_content_blocks(user_input, file_attachments, use_s3_reference)
+            # Stream events with content blocks
+            async for event in agent_instance.stream_async(content_blocks):
+                yield event
+        else:
+            # Stream events with plain text - session management automatically handles message storage
+            async for event in agent_instance.stream_async(user_input):
+                yield event
 
 async def process_chat_events(user_id: str, agent_id: str, user_message: str, chat_id: str, chat_record_enabled: bool = True) -> AsyncGenerator[Dict, None]:
     """

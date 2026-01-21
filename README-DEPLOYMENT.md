@@ -76,6 +76,7 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 # Create ECR repositories
 aws ecr create-repository --repository-name agentx/be --region $AWS_REGION
+aws ecr create-repository --repository-name agentx/rt-agentcore --region $AWS_REGION
 aws ecr create-repository --repository-name agentx/fe --region $AWS_REGION
 aws ecr create-repository --repository-name agentx/mcp-mysql --region $AWS_REGION
 aws ecr create-repository --repository-name agentx/mcp-redshift --region $AWS_REGION
@@ -115,32 +116,36 @@ aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --
 
 # Create repositories if they don't exist
 aws ecr describe-repositories --repository-names agentx/be --region $AWS_REGION || aws ecr create-repository --repository-name agentx/be --region $AWS_REGION
+aws ecr describe-repositories --repository-names agentx/rt-agentcore --region $AWS_REGION || aws ecr create-repository --repository-name agentx/rt-agentcore --region $AWS_REGION
 aws ecr describe-repositories --repository-names agentx/fe --region $AWS_REGION || aws ecr create-repository --repository-name agentx/fe --region $AWS_REGION
 aws ecr describe-repositories --repository-names agentx/mcp-mysql --region $AWS_REGION || aws ecr create-repository --repository-name agentx/mcp-mysql --region $AWS_REGION
 aws ecr describe-repositories --repository-names agentx/mcp-redshift --region $AWS_REGION || aws ecr create-repository --repository-name agentx/mcp-redshift --region $AWS_REGION
 aws ecr describe-repositories --repository-names agentx/mcp-duckdb --region $AWS_REGION || aws ecr create-repository --repository-name agentx/mcp-duckdb --region $AWS_REGION
 aws ecr describe-repositories --repository-names agentx/mcp-opensearch --region $AWS_REGION || aws ecr create-repository --repository-name agentx/mcp-opensearch --region $AWS_REGION
 
-# Build and push backend
+# Build and push backend and agentcore runtime image
 cd be
-docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/be:latest .
+docker build --platform linux/amd64 -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/be:latest .
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/be:latest
+
+docker buildx build --platform linux/arm64 -f ./Dockerfile.agentcore -t $AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/agentx/rt-agentcore:latest  --load .
+docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/rt-agentcore:latest
 
 # Build and push frontend
 cd ../fe
-docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/fe:latest .
+docker build --platform linux/amd64 -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/fe:latest .
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/fe:latest
 
 # Build and push MySQL MCP server
 cd ../mcp/mysql
-docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-mysql:latest .
+docker build --platform linux/amd64 -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-mysql:latest .
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-mysql:latest
 
 # Build and push Redshift MCP server
 cd ../mcp/redshift
-docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-redshift:latest .
+docker build --platform linux/amd64 -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-redshift:latest .
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-redshift:latest
-cd ../..
+
 ```
 
 #### Step 3: Deploy with CDK
@@ -156,27 +161,6 @@ chmod +x cdk/deploy.sh
 # Navigate to the CDK directory
 cd cdk
 
-# Basic deployment
-./deploy.sh --region us-west-2
-
-# Deployment with custom S3 configuration
-./deploy.sh --region us-west-2 --s3-bucket-name my-agentx-files --s3-file-prefix uploads/agentx
-
-# Deployment with selective MCP servers and custom S3
-./deploy.sh --region us-west-2 \
-  --no-mysql-mcp \
-  --no-redshift-mcp \
-  --s3-bucket-name production-files \
-  --s3-file-prefix agentx/prod/files
-
-# Deployment with existing VPC and custom configuration
-./deploy.sh --region us-west-2 \
-  --vpc-id vpc-12345678 \
-  --aws-db-mcp-cpu 2048 \
-  --aws-db-mcp-memory 4096 \
-  --s3-bucket-name enterprise-storage \
-  --s3-file-prefix agentx/enterprise
-
 # Deployment with Azure AD SSO and existing VPC (no MCP servers)
 ./deploy.sh --region us-west-2 \
   --vpc-id vpc-12345678 \
@@ -188,7 +172,8 @@ cd cdk
   --azure-client-id your-azure-client-id \
   --azure-tenant-id your-azure-tenant-id \
   --azure-client-secret your-azure-client-secret \
-  --jwt-secret-key your-secure-jwt-secret
+  --jwt-secret-key your-secure-jwt-secret \
+  --s3-bucket-name your-s3-bucket
 ```
 
 Available options:
@@ -308,333 +293,3 @@ After deployment is complete, you can verify the deployment by:
    - Verify successful login and user profile synchronization
    - Check that user information is correctly stored in DynamoDB
    - Test logout and re-login functionality
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-Before deployment, you should update the environment variables in the CDK stack (`cdk/lib/agentx-stack-combined.ts`):
-
-#### Backend Environment Variables
-
-```typescript
-const beContainer = beTaskDefinition.addContainer('BeContainer', {
-  // ...
-  environment: {
-    APP_ENV: 'production',
-    AWS_REGION: this.region,
-    // JWT Configuration (required)
-    JWT_SECRET_KEY: 'your-jwt-secret-key-change-this-in-production',
-    // Azure AD Configuration (optional, for SSO)
-    AZURE_CLIENT_ID: 'your-azure-client-id',
-    AZURE_TENANT_ID: 'your-azure-tenant-id',
-    AZURE_CLIENT_SECRET: 'your-azure-client-secret',
-    AZURE_AUTHORITY: 'https://login.microsoftonline.com/your-azure-tenant-id',
-    // Add other environment variables as needed
-  },
-});
-```
-
-> **Security Note**: For production deployments, use AWS Secrets Manager to store sensitive values like `JWT_SECRET_KEY` and `AZURE_CLIENT_SECRET` instead of hardcoding them in the CDK stack.
-
-#### Frontend Environment Variables
-
-```typescript
-const feContainer = feTaskDefinition.addContainer('FeContainer', {
-  // ...
-  environment: {
-    NODE_ENV: 'production',
-    API_BASE_URL: 'https://your-alb-dns-name/api',
-    // Azure AD Configuration (optional, for SSO)
-    VITE_AZURE_CLIENT_ID: 'your-azure-client-id',
-    VITE_AZURE_AUTHORITY: 'https://login.microsoftonline.com/your-azure-tenant-id',
-    VITE_AZURE_REDIRECT_URI: 'https://your-alb-dns-name',
-    VITE_AZURE_POST_LOGOUT_REDIRECT_URI: 'https://your-alb-dns-name',
-    // Add other environment variables as needed
-  },
-});
-```
-
-#### MCP Server Environment Variables
-
-```typescript
-const mcpMysqlContainer = mcpMysqlTaskDefinition.addContainer('McpMysqlContainer', {
-  // ...
-  environment: {
-    NODE_ENV: 'production',
-    AWS_REGION: this.region,
-    MYSQL_HOST: 'your-mysql-host',
-    MYSQL_PORT: '3306',
-    MYSQL_USER: 'your-mysql-user',
-    MYSQL_PASSWORD: 'your-mysql-password',
-    MYSQL_DATABASE: 'your-mysql-database',
-  },
-});
-
-const mcpRedshiftContainer = mcpRedshiftTaskDefinition.addContainer('McpRedshiftContainer', {
-  // ...
-  environment: {
-    PYTHON_ENV: 'production',
-    AWS_REGION: this.region,
-    RS_HOST: 'your-redshift-host',
-    RS_PORT: '5439',
-    RS_USER: 'your-redshift-user',
-    RS_PASSWORD: 'your-redshift-password',
-    RS_DATABASE: 'your-redshift-database',
-    RS_SCHEMA: 'public',
-  },
-});
-
-const mcpDuckDbContainer = mcpDuckDbTaskDefinition.addContainer('McpDuckDbContainer', {
-  // ...
-  environment: {
-    PYTHON_ENV: 'production',
-    AWS_REGION: this.region,
-    PORT: '8000',
-  },
-});
-
-const mcpOpenSearchContainer = mcpOpenSearchTaskDefinition.addContainer('McpOpenSearchContainer', {
-  // ...
-  environment: {
-    NODE_ENV: 'production',
-    AWS_REGION: this.region,
-    OPENSEARCH_HOST: 'your-opensearch-host',
-    OPENSEARCH_PORT: '9200',
-    OPENSEARCH_USER: 'your-opensearch-user',
-    OPENSEARCH_PASSWORD: 'your-opensearch-password',
-  },
-});
-```
-
-### Security Considerations
-
-For production deployments, consider these security enhancements:
-
-1. **Use AWS Secrets Manager** for sensitive environment variables:
-   ```typescript
-   // Store JWT secret in Secrets Manager
-   const jwtSecret = secretsmanager.Secret.fromSecretNameV2(this, 'JwtSecret', 'agentx/jwt-secret');
-   beContainer.addSecret('JWT_SECRET_KEY', ecs.Secret.fromSecretsManager(jwtSecret));
-   
-   // Store Azure AD credentials in Secrets Manager
-   const azureSecret = secretsmanager.Secret.fromSecretNameV2(this, 'AzureSecret', 'agentx/azure-credentials');
-   beContainer.addSecret('AZURE_CLIENT_SECRET', ecs.Secret.fromSecretsManager(azureSecret, 'client_secret'));
-   beContainer.addSecret('AZURE_CLIENT_ID', ecs.Secret.fromSecretsManager(azureSecret, 'client_id'));
-   beContainer.addSecret('AZURE_TENANT_ID', ecs.Secret.fromSecretsManager(azureSecret, 'tenant_id'));
-   ```
-
-2. **Configure Azure AD App Registration for Production**:
-   - Update redirect URIs to use your production domain (e.g., `https://your-domain.com`)
-   - Enable only required API permissions
-   - Configure token lifetime policies according to your security requirements
-   - Enable Conditional Access policies for additional security
-   - Configure multi-factor authentication (MFA) requirements
-
-3. **Implement proper IAM roles and policies**:
-   ```typescript
-   const taskRole = new iam.Role(this, 'TaskRole', {
-     assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
-   });
-   taskRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBFullAccess'));
-   // Add Secrets Manager read permissions for Azure AD credentials
-   taskRole.addToPolicy(new iam.PolicyStatement({
-     actions: ['secretsmanager:GetSecretValue'],
-     resources: ['arn:aws:secretsmanager:region:account:secret:agentx/*'],
-   }));
-   ```
-
-4. **Enable HTTPS** with an SSL certificate:
-   ```typescript
-   const certificate = acm.Certificate.fromCertificateArn(this, 'Certificate', 'arn:aws:acm:region:account:certificate/certificate-id');
-   const httpsListener = lb.addListener('HttpsListener', {
-     port: 443,
-     certificates: [certificate],
-     sslPolicy: elbv2.SslPolicy.RECOMMENDED,
-   });
-   ```
-
-5. **Azure AD Token Security**:
-   - Backend validates Azure AD tokens using Microsoft's public keys
-   - Token expiration is enforced (default: 1 hour for access tokens)
-   - ID tokens are verified for audience, issuer, and signature
-   - User information is synchronized from Azure AD on each login
-
-## 📊 Monitoring and Logging
-
-### CloudWatch Logs
-
-All services are configured to send logs to CloudWatch Logs:
-
-```typescript
-const logGroup = new logs.LogGroup(this, 'LogGroup', {
-  logGroupName: '/ecs/agentx-service',
-  removalPolicy: cdk.RemovalPolicy.DESTROY,
-  retention: logs.RetentionDays.ONE_WEEK,
-});
-
-container.addLogging(ecs.LogDrivers.awsLogs({
-  streamPrefix: 'service',
-  logGroup: logGroup,
-}));
-```
-
-### CloudWatch Alarms
-
-Add CloudWatch Alarms for monitoring:
-
-```typescript
-new cloudwatch.Alarm(this, 'HighCpuAlarm', {
-  metric: service.metricCpuUtilization(),
-  threshold: 90,
-  evaluationPeriods: 3,
-  datapointsToAlarm: 2,
-});
-```
-
-### X-Ray Tracing
-
-Enable X-Ray for distributed tracing:
-
-```typescript
-const taskDefinition = new ecs.FargateTaskDefinition(this, 'TaskDef');
-taskDefinition.addContainer('XRayDaemon', {
-  image: ecs.ContainerImage.fromRegistry('amazon/aws-xray-daemon'),
-  essential: true,
-  portMappings: [{ containerPort: 2000, protocol: ecs.Protocol.UDP }],
-});
-```
-
-## 💰 Cost Optimization
-
-### Use EC2 Instead of Fargate
-
-For cost savings, consider using EC2 launch type instead of Fargate:
-
-```typescript
-const service = new ecs.Ec2Service(this, 'Service', {
-  cluster,
-  taskDefinition,
-  desiredCount: 2,
-});
-```
-
-### Auto Scaling
-
-Implement auto scaling to adjust capacity based on demand:
-
-```typescript
-const scaling = service.autoScaleTaskCount({
-  minCapacity: 2,
-  maxCapacity: 10,
-});
-
-scaling.scaleOnCpuUtilization('CpuScaling', {
-  targetUtilizationPercent: 70,
-});
-```
-
-### VPC Endpoints
-
-Use VPC endpoints to reduce NAT Gateway costs:
-
-```typescript
-new ec2.InterfaceVpcEndpoint(this, 'DynamoDBEndpoint', {
-  vpc,
-  service: ec2.InterfaceVpcEndpointAwsService.DYNAMODB,
-});
-```
-
-## 🔄 Continuous Deployment
-
-### GitHub Actions
-
-Create a GitHub Actions workflow for continuous deployment:
-
-```yaml
-name: Deploy to AWS
-
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-west-2
-      - name: Build and push Docker images
-        run: ./build-and-push.sh us-west-2
-      - name: Deploy with CDK
-        run: |
-          cd cdk
-          npm install
-          npm run cdk deploy -- --all --require-approval never
-```
-
-### AWS CodePipeline
-
-Alternatively, set up AWS CodePipeline for continuous deployment:
-
-```typescript
-const pipeline = new codepipeline.Pipeline(this, 'Pipeline', {
-  pipelineName: 'AgentXPipeline',
-});
-
-const sourceOutput = new codepipeline.Artifact();
-const sourceAction = new codepipeline_actions.CodeStarConnectionsSourceAction({
-  actionName: 'GitHub',
-  owner: 'your-github-username',
-  repo: 'agentx',
-  branch: 'main',
-  output: sourceOutput,
-  connectionArn: 'arn:aws:codestar-connections:region:account:connection/connection-id',
-});
-
-pipeline.addStage({
-  stageName: 'Source',
-  actions: [sourceAction],
-});
-
-// Add build and deploy stages
-```
-
-## 🔍 Troubleshooting
-
-### Common Issues
-
-1. **Container fails to start**:
-   - Check CloudWatch Logs for error messages
-   - Verify environment variables are correctly set
-   - Ensure IAM permissions are sufficient
-
-2. **Load balancer health checks failing**:
-   - Verify the health check path is correct
-   - Check that the container is listening on the expected port
-   - Ensure security groups allow traffic between the load balancer and containers
-
-3. **CDK deployment errors**:
-   - Check that AWS credentials are correctly configured
-   - Verify that the CDK is bootstrapped in the target region
-   - Check for syntax errors in CDK code
-
-### Useful Commands
-
-```bash
-# View service logs
-aws logs get-log-events --log-group-name /ecs/agentx-be --log-stream-name stream-name
-
-# Check service status
-aws ecs describe-services --cluster agentx-cluster --services agentx-be-service
-
-# View task details
-aws ecs describe-tasks --cluster agentx-cluster --tasks task-id
-
-# SSH into EC2 instance (if using EC2 launch type)
-aws ssm start-session --target instance-id
