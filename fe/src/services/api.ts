@@ -120,6 +120,12 @@ export const TOOL_TYPES = {
   PYTHON: 4,
 };
 
+// Agent runtime types
+export const AGENT_RUNTIME = {
+  LOCAL: 1,
+  AGENTCORE: 2,
+};
+
 // Bedrock models
 export const BEDROCK_MODELS = [
   'us.anthropic.claude-sonnet-4-20250514-v1:0',
@@ -173,6 +179,7 @@ export interface Agent {
   shared_groups?: string[];
   is_public?: boolean;
   creator?: string; // User ID of the agent creator
+  runtime?: number; // Runtime environment: 1=local, 2=agentcore
 }
 
 // Interface for MCP Server

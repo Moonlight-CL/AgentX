@@ -160,13 +160,15 @@ class AuthConfig:
         default_paths = {
             "/",
             "/docs",
-            "/openapi.json", 
+            "/openapi.json",
             "/redoc",
             "/user/register",
             "/user/login",
             "/user/azure-login",
             "/health",  # Health check endpoint
             "/metrics", # Metrics endpoint (if added)
+            "/ping",  # AgentCore Runtime health check
+            "/invocations",  # AgentCore Runtime invocation endpoint
         }
         
         # Allow configuration via environment variable

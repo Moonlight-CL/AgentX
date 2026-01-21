@@ -9,6 +9,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as path from 'path';
+import * as agentcore from '@aws-cdk/aws-bedrock-agentcore-alpha';
 
 export interface AgentXStackProps extends cdk.StackProps {
   /**
@@ -151,6 +152,7 @@ export class AgentXStack extends cdk.Stack {
     const mcpDuckDbRepository = ecr.Repository.fromRepositoryName(this, 'McpDuckDbRepository', 'agentx/mcp-duckdb');
     const mcpOpenSearchRepository = ecr.Repository.fromRepositoryName(this, 'McpOpenSearchRepository', 'agentx/mcp-opensearch');
     const mcpAwsDbRepository = ecr.Repository.fromRepositoryName(this, 'McpAwsDbRepository', 'agentx/mcp-aws-db');
+    const agentCoreRuntimeRepository = ecr.Repository.fromRepositoryName(this, 'AgentCoreRuntimeRepository', 'agentx/rt-agentcore');
 
     // Create a security group for the load balancer
     const lbSecurityGroup = new ec2.SecurityGroup(this, 'LbSecurityGroup', {
@@ -963,6 +965,12 @@ export class AgentXStack extends cdk.Stack {
       exportName: 'LoadBalancerDNS',
     });
 
+    // Deploy AgentCore Runtime
+    const agentCoreRuntimeArn = this.deployAgentCoreRuntime(agentCoreRuntimeRepository, s3BucketName, s3FilePrefix);
+
+    // Add AgentCore Runtime ARN to BE container environment variables
+    beContainer.addEnvironment('AGENTCORE_RUNTIME_ARN', agentCoreRuntimeArn);
+
     // Deploy Agent Schedule functionality
     const { lambdaFunctionArn, schedulerRoleArn } = this.deployAgentScheduleResources(lb.loadBalancerDnsName, beContainer);
 
@@ -1044,5 +1052,54 @@ export class AgentXStack extends cdk.Stack {
       lambdaFunctionArn: schedulerLambda.functionArn,
       schedulerRoleArn: schedulerRole.roleArn
     };
+  }
+
+  /**
+   * Deploy AgentCore Runtime for AgentX
+   * @param repository The ECR repository containing the AgentCore Runtime image
+   * @param s3BucketName S3 bucket name for file storage
+   * @param s3FilePrefix S3 file prefix for file storage
+   * @returns The ARN of the created AgentCore Runtime
+   */
+  private deployAgentCoreRuntime(repository: ecr.IRepository, s3BucketName: string, s3FilePrefix: string): string {
+    console.log('Deploying AgentCore Runtime');
+
+    // Create IAM execution role for AgentCore Runtime
+    const agentCoreExecutionRole = new iam.Role(this, 'AgentCoreRuntimeExecutionRole', {
+      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+      managedPolicies: [
+        // For testing purposes, using AdministratorAccess as requested
+        iam.ManagedPolicy.fromAwsManagedPolicyName('AdministratorAccess'),
+      ],
+    });
+
+    // Create AgentRuntimeArtifact from ECR repository
+    const agentRuntimeArtifact = agentcore.AgentRuntimeArtifact.fromEcrRepository(
+      repository,
+      'latest'
+    );
+
+    // Create AgentCore Runtime
+    const runtime = new agentcore.Runtime(this, 'AgentXAgentCoreRuntime', {
+      runtimeName: 'agentx_runtime',
+      agentRuntimeArtifact: agentRuntimeArtifact,
+      executionRole: agentCoreExecutionRole,
+      environmentVariables: {
+        S3_BUCKET_NAME: s3BucketName,
+        S3_FILE_PREFIX: s3FilePrefix,
+        AWS_REGION: this.region,
+      },
+      networkConfiguration: agentcore.RuntimeNetworkConfiguration.usingPublicNetwork(),
+    });
+
+    // Output the AgentCore Runtime ARN
+    new cdk.CfnOutput(this, 'AgentCoreRuntimeArn', {
+      value: runtime.agentRuntimeArn,
+      description: 'The ARN of the AgentCore Runtime',
+      exportName: 'AgentCoreRuntimeArn',
+    });
+
+    console.log('AgentCore Runtime will be deployed');
+    return runtime.agentRuntimeArn;
   }
 }

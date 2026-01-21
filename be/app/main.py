@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 import os
 
 from .routers import agent
@@ -11,6 +12,7 @@ from .routers import config
 from .routers import files
 from .routers import rest_api
 from .middleware.auth_middleware import AuthMiddleware, AuthConfig
+from .routers.agentcore_handler import AgentCoreInvocationHandler
 
 app = FastAPI()
 
@@ -34,3 +36,56 @@ app.include_router(rest_api.router, prefix=url_prefix)
 @app.get("/")
 def home():
     return {"App": "AgentX-BE"}
+
+# AgentCore Runtime endpoints
+@app.get("/ping")
+async def ping():
+    """
+    Health check endpoint required by AgentCore Runtime.
+    Returns 200 OK when the service is healthy.
+    """
+    return {"status": "healthy", "service": "AgentX-BE"}
+
+@app.post("/invocations")
+async def invocations(request: Request):
+    """
+    Main invocation endpoint required by AgentCore Runtime.
+    This endpoint processes agent requests and returns streaming responses using SSE.
+
+    Expected input format:
+    {
+        "input": {
+            "agent_id": "agent_id",
+            "prompt": "user message",
+            "session_id": "optional_session_id",
+            "user_id": "optional_user_id",
+            "file_attachments": [],  # optional
+            "chat_record_enabled": true,  # optional, default True
+            "use_s3_reference": false,  # optional, default False
+            "agent_owner_id": "optional_owner_id"  # optional
+        }
+    }
+    """
+    try:
+        # Parse request body
+        data = await request.json()
+
+        # Use handler to process invocation
+        handler = AgentCoreInvocationHandler()
+
+        # Return streaming response
+        return StreamingResponse(
+            handler.handle_invocation_stream(data),
+            media_type="text/event-stream"
+        )
+
+    except Exception as e:
+        print(f"Error processing invocation: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": f"Agent processing failed: {str(e)}"
+            }
+        )

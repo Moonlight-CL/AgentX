@@ -101,6 +101,30 @@ print_status "Starting build and push process for all services..."
 build_and_push "Backend" "agentx-be" "be" "agentx/be"
 build_and_push "Frontend" "agentx-fe" "fe" "agentx/fe"
 
+# AgentCore Runtime
+print_status "Building AgentCore Runtime image..."
+# Check if Dockerfile.agentcore exists
+if [ -f "be/Dockerfile.agentcore" ]; then
+  create_repository "agentx/rt-agentcore"
+
+  cd "be"
+  # Build ARM64 image for AgentCore Runtime
+  print_status "Building ARM64 image for AgentCore Runtime (this may take a while)..."
+  docker buildx create --use --name agentcore-builder 2>/dev/null || docker buildx use agentcore-builder
+  docker buildx build \
+    --platform linux/arm64 \
+    -f ./Dockerfile.agentcore \
+    -t "agentx-rt-agentcore:latest" \
+    -t "${ECR_REGISTRY}/agentx/rt-agentcore:latest" \
+    --push \
+    .
+  cd - > /dev/null
+
+  print_success "AgentCore Runtime image built and pushed successfully"
+else
+  print_warning "Dockerfile.agentcore not found in be/, skipping AgentCore Runtime"
+fi
+
 # MCP services
 print_status "Building MCP services..."
 build_and_push "MCP AWS-DB" "agentx-mcp-aws-db" "mcp/aws-db" "agentx/mcp-aws-db"
@@ -120,6 +144,7 @@ echo ""
 print_status "Available ECR repositories:"
 echo "- ${ECR_REGISTRY}/agentx/be:latest"
 echo "- ${ECR_REGISTRY}/agentx/fe:latest"
+echo "- ${ECR_REGISTRY}/agentx/rt-agentcore:latest"
 echo "- ${ECR_REGISTRY}/agentx/mcp-aws-db:latest"
 echo "- ${ECR_REGISTRY}/agentx/mcp-duckdb:latest"
 echo "- ${ECR_REGISTRY}/agentx/mcp-mysql:latest"

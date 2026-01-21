@@ -87,3 +87,6 @@ memory-bank/
 .clinerules/
 
 cdk.context.json
+
+# Claude Code
+.mcp.json

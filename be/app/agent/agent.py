@@ -22,6 +22,7 @@ from pydantic import BaseModel
 AgentType  = Enum("AgentType", ("plain", "orchestrator"))
 ModelProvider = Enum("ModelProvider", ("bedrock", "openai", "anthropic", "litellm", "ollama", "custom"))
 AgentToolType = Enum("AgentToolType", ("strands", "mcp", "agent", "python"))
+AgentRuntime = Enum("AgentRuntime", ("local", "agentcore"))
 
 class Tools(Enum):
 
@@ -123,6 +124,7 @@ class AgentPO(BaseModel):
     shared_groups: Optional[List[str]] = None  # List of group IDs this agent is shared with
     is_public: bool = False  # Whether this agent is public
     creator: Optional[str] = None  # User ID of the agent creator
+    runtime: AgentRuntime = AgentRuntime.local  # Runtime environment: local or agentcore
 
     def __repr__(self):
         return f"AgentPO(name={self.name}, display_name={self.display_name} description={self.description}, " \
@@ -264,20 +266,21 @@ class AgentPOService:
             'sys_prompt': agent_po.sys_prompt,
             'tools': [tool.model_dump_json() for tool in agent_po.tools],  # Convert tools to JSON string
             'envs': agent_po.envs,
-            'is_public': agent_po.is_public
+            'is_public': agent_po.is_public,
+            'runtime': agent_po.runtime.value
         }
-        
+
         # Add extras if it exists
         if agent_po.extras:
             item['extras'] = agent_po.extras
-        
+
         # Add sharing fields if they exist
         if agent_po.shared_users:
             item['shared_users'] = agent_po.shared_users
-        
+
         if agent_po.shared_groups:
             item['shared_groups'] = agent_po.shared_groups
-            
+
         table.put_item(Item=item)
 
     def get_agent(self, user_id: str, id: str) -> Optional[AgentPO]:
@@ -920,6 +923,15 @@ class AgentPOService:
             print(f"Warning: Invalid agent_type {agent_type_value} for agent {item.get('id')}, defaulting to plain")
             agent_type_value = 1  # Default to plain
     
+        # Handle runtime field - default to local if not present
+        runtime_value = item.get('runtime', 1)  # 1 is 'local'
+        if isinstance(runtime_value, (int, float)):
+            runtime_value = int(runtime_value)
+        # Validate runtime value (1 or 2)
+        if runtime_value not in [1, 2]:
+            print(f"Warning: Invalid runtime {runtime_value} for agent {item.get('id')}, defaulting to local")
+            runtime_value = 1  # Default to local
+
         return AgentPO(
             id=item['id'],
             name=item['name'],
@@ -935,7 +947,8 @@ class AgentPOService:
             shared_users=item.get('shared_users'),
             shared_groups=item.get('shared_groups'),
             is_public=item.get('is_public', False),
-            creator=item.get('user_id')  # Use user_id as creator
+            creator=item.get('user_id'),  # Use user_id as creator
+            runtime=AgentRuntime(runtime_value)
         )
 
 # Agent Chat Records (扩展支持编排记录)
