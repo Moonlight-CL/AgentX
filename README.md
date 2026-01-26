@@ -4,7 +4,7 @@ AgentX is an agent management platform built on top of the Strands framework, al
 
 **Agent = LLM Model + System Prompt + Tools + Environment**
 
-## 🌟 Features
+## Features
 
 ### Core Platform Features
 - **User Authentication**: Secure user registration and login system with JWT token-based authentication
@@ -21,12 +21,7 @@ AgentX is an agent management platform built on top of the Strands framework, al
 - **Agent Orchestration**: Create orchestrator agents that can coordinate with other agents to handle complex workflows
 - **Scheduling System**: Schedule agent tasks to run automatically at specified times using AWS EventBridge
 - **Configuration Management**: Centralized configuration system for managing agent settings and preferences
-
-### MCP Integration
-- **Model Context Protocol Support**: Extend agent capabilities with specialized MCP servers
-- **Database Integration**: Connect to MySQL, Redshift, DuckDB, and OpenSearch databases
-- **AWS Services Integration**: Built-in AWS database evaluation and analysis tools
-- **Custom MCP Servers**: Support for adding custom MCP servers to extend functionality
+- **MCP Integration**: Support for adding custom HTTP MCP (Model Context Protocol) servers to extend agent functionality
 
 ### Enterprise Features
 - **Scalable Architecture**: Built on AWS ECS with auto-scaling capabilities
@@ -34,18 +29,18 @@ AgentX is an agent management platform built on top of the Strands framework, al
 - **Monitoring & Logging**: Comprehensive logging with CloudWatch integration
 - **Security**: IAM-based access control and VPC isolation
 
-## 🏗️ Architecture
+## Architecture
 
-The project consists of three main components:
+The project consists of two main components:
 
-### 🔙 Backend (be/)
+### Backend (be/)
 
 A FastAPI-based API server that provides:
 - RESTful APIs for agent management
 - WebSocket endpoints for streaming chat with agents
 - Integration with AWS services (DynamoDB, EventBridge, Lambda)
 
-### 🖥️ Frontend (fe/)
+### Frontend (fe/)
 
 A React/TypeScript application built with:
 - Vite for fast development and optimized builds
@@ -53,15 +48,7 @@ A React/TypeScript application built with:
 - Zustand for state management
 - TypeScript for type safety
 
-### 🔌 MCP Servers (mcp/)
-
-Model Context Protocol servers that extend agent capabilities:
-- **MySQL MCP**: Tools for interacting with MySQL databases
-- **Redshift MCP**: Tools for interacting with Amazon Redshift
-- **DuckDB MCP**: Tools for interacting with DuckDB databases
-- **OpenSearch MCP**: Tools for interacting with OpenSearch
-
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -82,7 +69,7 @@ AgentX supports Azure AD single sign-on for enterprise authentication. To enable
 3. Configure the application:
    - **Name**: AgentX (or your preferred name)
    - **Supported account types**: Choose based on your requirements
-   - **Redirect URI**: 
+   - **Redirect URI**:
      - Type: Single-page application (SPA)
      - URI: `http://localhost:5173` (for local development) or your production URL
 4. After registration, note down:
@@ -176,52 +163,54 @@ AgentX supports both local and Azure AD authentication simultaneously:
    ```
 
 3. **Set up local DynamoDB tables**:
-   
+
    For local development, you need to create the following DynamoDB tables. These tables support the core functionality of AgentX including user management, agent storage, chat history, and MCP server configuration:
-   
+
    **Core Tables:**
-   
+
    - **UserTable** (User authentication and management)
      - Partition key: `user_id` (String)
-   
+
    - **AgentTable** (Agent configurations and metadata)
      - Partition key: `user_id` (String)
      - Sort key: `id` (String)
-   
+
    - **ChatRecordTable** (Chat session records)
      - Partition key: `user_id` (String)
      - Sort key: `id` (String)
-   
+
    - **ChatResponseTable** (Individual chat messages and responses)
      - Partition key: `id` (String)
      - Sort key: `resp_no` (Number)
-   
+
    - **ChatSessionTable** (Chat session management and memory storage)
      - Partition key: `PK` (String)
      - Sort key: `SK` (String)
-   
-   **MCP and Advanced Features:**
-   
-   - **HttpMCPTable** (MCP server configurations)
+
+   **Advanced Features:**
+
+   - **HttpMCPTable** (HTTP MCP server configurations)
      - Partition key: `user_id` (String)
      - Sort key: `id` (String)
-   
-   - **RestAPIRegistry** (REST API adapter configurations)
+
+   - **RestAPIRegistryTable** (REST API adapter configurations)
      - Partition key: `user_id` (String)
      - Sort key: `api_id` (String)
-   
+     - Purpose: Stores REST API configurations for integration with agents
+
    - **AgentScheduleTable** (Scheduled agent tasks)
-     - Partition key: `id` (String)
-   
+     - Partition key: `user_id` (String)
+     - Sort key: `id` (String)
+
    **Additional Tables** (used by orchestration and configuration features):
-   
+
    - **OrcheTable** (Orchestration workflows)
      - Partition key: `user_id` (String)
      - Sort key: `id` (String)
-   
+
    - **ConfTable** (System configurations)
      - Partition key: `key` (String)
-   
+
    > **Note**: When deploying to AWS, these tables are automatically created by the CDK stack. For local development with DynamoDB Local, you'll need to create them manually or use the AWS CLI with `--endpoint-url` pointing to your local DynamoDB instance.
 
 4. **Set up the frontend**:
@@ -231,28 +220,7 @@ AgentX supports both local and Azure AD authentication simultaneously:
    bun run dev
    ```
 
-5. **Set up MCP servers** (optional):
-   ```bash
-   # For MySQL MCP
-   cd mcp/mysql
-   bun install
-   bun run index.ts --transport http --port 3000
-   
-   # For Redshift MCP
-   cd mcp/redshift
-   uv sync
-   python -m redshift_mcp_server --transport streamable-http --port 3001
-   
-   # For DuckDB MCP
-   cd mcp/duckdb
-   # Follow setup instructions in the directory
-   
-   # For OpenSearch MCP
-   cd mcp/opensearch
-   # Follow setup instructions in the directory
-   ```
-
-## 📦 Deployment
+## Deployment
 
 The deployment process consists of three main steps:
 
@@ -262,26 +230,22 @@ The deployment process consists of three main steps:
 
 For detailed deployment instructions, see [README-DEPLOYMENT.md](README-DEPLOYMENT.md).
 
-## 📚 Documentation
+## Documentation
 
 - [Backend API Documentation](be/README.md)
 - [Frontend Documentation](fe/README.md)
-- [MySQL MCP Server Documentation](mcp/mysql/README.md)
-- [Redshift MCP Server Documentation](mcp/redshift/README.md)
-- [DuckDB MCP Server Documentation](mcp/duckdb/README.md)
-- [OpenSearch MCP Server Documentation](mcp/opensearch/README.md)
+- [CDK Deployment Documentation](cdk/README.md)
 
-## 🛠️ Technologies
+## Technologies
 
 - **Backend**: FastAPI, Strands, Boto3, DynamoDB, EventBridge
 - **Frontend**: React, TypeScript, Vite, Ant Design, Zustand
-- **MCP Servers**: Python, Bun, MySQL, Redshift
 - **Deployment**: Docker, AWS CDK, ECS, ECR
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.

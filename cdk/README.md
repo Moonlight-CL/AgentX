@@ -24,11 +24,8 @@ The deployment includes the following components:
 
 1. **Backend (BE)** - FastAPI Python application
 2. **Frontend (FE)** - React/TypeScript application
-3. **MCP MySQL** - MySQL MCP server
-4. **MCP Redshift** - Redshift MCP server
-5. **MCP DuckDB** - DuckDB MCP server
-6. **MCP OpenSearch** - OpenSearch MCP server
-7. **Agent Schedule** - Lambda function for executing scheduled agent tasks
+3. **Agent Schedule** - Lambda function for executing scheduled agent tasks
+4. **AgentCore Runtime** - Bedrock AgentCore runtime for agent execution
 
 ## Deployment Process
 
@@ -44,10 +41,7 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 # Create ECR repositories
 aws ecr create-repository --repository-name agentx/be --region $AWS_REGION
 aws ecr create-repository --repository-name agentx/fe --region $AWS_REGION
-aws ecr create-repository --repository-name agentx/mcp-mysql --region $AWS_REGION
-aws ecr create-repository --repository-name agentx/mcp-redshift --region $AWS_REGION
-aws ecr create-repository --repository-name agentx/mcp-duckdb --region $AWS_REGION
-aws ecr create-repository --repository-name agentx/mcp-opensearch --region $AWS_REGION
+aws ecr create-repository --repository-name agentx/rt-agentcore --region $AWS_REGION
 ```
 
 ### Step 2: Build and Push Docker Images
@@ -67,17 +61,6 @@ docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/be:latest
 cd ../fe
 docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/fe:latest .
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/fe:latest
-
-# Build and push MCP MySQL image
-cd ../mcp/mysql
-docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-mysql:latest .
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-mysql:latest
-
-# Build and push MCP Redshift image
-cd ../mcp/redshift
-docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-redshift:latest .
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-redshift:latest
-cd ../..
 ```
 
 Alternatively, you can use the provided script:
@@ -107,11 +90,14 @@ chmod +x deploy.sh
 Available options:
 - `--region REGION`: AWS region to deploy to
 - `--vpc-id VPC_ID`: Use existing VPC ID instead of creating a new one
-- `--no-mysql-mcp`: Disable MySQL MCP server deployment
-- `--no-redshift-mcp`: Disable Redshift MCP server deployment
-- `--no-duckdb-mcp`: Disable DuckDB MCP server deployment
-- `--no-opensearch-mcp`: Disable OpenSearch MCP server deployment
 - `--no-dynamodb-tables`: Disable creation of DynamoDB tables
+- `--s3-bucket-name BUCKET`: S3 bucket name for file storage
+- `--s3-file-prefix PREFIX`: S3 file prefix for file storage
+- `--azure-client-id ID`: Azure AD Client ID for SSO (optional)
+- `--azure-tenant-id ID`: Azure AD Tenant ID for SSO (optional)
+- `--azure-client-secret SEC`: Azure AD Client Secret for SSO (optional)
+- `--jwt-secret-key KEY`: JWT Secret Key for token generation
+- `--service-api-key KEY`: Service API Key for Lambda authentication
 
 #### Manual CDK Deployment
 
@@ -133,8 +119,7 @@ cdk --app "npx ts-node --prefer-ts-exts bin/cdk-combined.ts" deploy AgentXStack
 After deployment, you'll need to configure the following:
 
 1. **Environment Variables**: Update environment variables in the CDK stack for each service as needed.
-2. **Database Configuration**: Configure database connection strings for the MCP servers.
-3. **SSL Certificate**: For production, create and attach an SSL certificate to the HTTPS listener.
+2. **SSL Certificate**: For production, create and attach an SSL certificate to the HTTPS listener.
 
 ## Useful CDK Commands
 

@@ -81,7 +81,7 @@ build_and_push() {
   create_repository "${repo_name}"
   
   cd "${build_path}"
-  docker build -t "${image_name}" .
+  docker build --platform linux/arm64 -t "${image_name}" .
   docker tag "${image_name}:latest" "${ECR_REGISTRY}/${repo_name}:latest"
   docker push "${ECR_REGISTRY}/${repo_name}:latest"
   cd - > /dev/null
@@ -125,14 +125,6 @@ else
   print_warning "Dockerfile.agentcore not found in be/, skipping AgentCore Runtime"
 fi
 
-# MCP services
-print_status "Building MCP services..."
-build_and_push "MCP AWS-DB" "agentx-mcp-aws-db" "mcp/aws-db" "agentx/mcp-aws-db"
-build_and_push "MCP DuckDB" "agentx-mcp-duckdb" "mcp/duckdb" "agentx/mcp-duckdb"
-build_and_push "MCP MySQL" "agentx-mcp-mysql" "mcp/mysql" "agentx/mcp-mysql"
-build_and_push "MCP OpenSearch" "agentx-mcp-opensearch" "mcp/opensearch" "agentx/mcp-opensearch"
-build_and_push "MCP Redshift" "agentx-mcp-redshift" "mcp/redshift" "agentx/mcp-redshift"
-
 print_success "All images have been built and pushed to ECR successfully!"
 echo ""
 print_status "Next steps:"
@@ -145,8 +137,3 @@ print_status "Available ECR repositories:"
 echo "- ${ECR_REGISTRY}/agentx/be:latest"
 echo "- ${ECR_REGISTRY}/agentx/fe:latest"
 echo "- ${ECR_REGISTRY}/agentx/rt-agentcore:latest"
-echo "- ${ECR_REGISTRY}/agentx/mcp-aws-db:latest"
-echo "- ${ECR_REGISTRY}/agentx/mcp-duckdb:latest"
-echo "- ${ECR_REGISTRY}/agentx/mcp-mysql:latest"
-echo "- ${ECR_REGISTRY}/agentx/mcp-opensearch:latest"
-echo "- ${ECR_REGISTRY}/agentx/mcp-redshift:latest"

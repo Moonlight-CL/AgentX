@@ -2,7 +2,7 @@
 
 A comprehensive guide for deploying the AgentX platform to AWS using Docker and AWS CDK.
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 The AgentX deployment architecture consists of:
 
@@ -12,8 +12,9 @@ The AgentX deployment architecture consists of:
 - **DynamoDB Tables**: Data storage with user authentication and data isolation
 - **EventBridge Scheduler**: Task scheduling
 - **Lambda Functions**: Serverless execution
+- **AgentCore Runtime**: Bedrock AgentCore runtime for agent execution
 
-## 🧩 Components
+## Components
 
 The project consists of the following deployable components:
 
@@ -27,27 +28,10 @@ The project consists of the following deployable components:
    - Port: 80
    - Path: `/` (default)
 
-3. **MySQL MCP Server**: MySQL Model Context Protocol server
-   - Container: `agentx/mcp-mysql`
-   - Port: 3000
-   - Path: `/mcp-server/mysql/*`
+3. **AgentCore Runtime**: Bedrock AgentCore runtime
+   - Container: `agentx/rt-agentcore`
 
-4. **Redshift MCP Server**: Redshift Model Context Protocol server
-   - Container: `agentx/mcp-redshift`
-   - Port: 3000
-   - Path: `/mcp-server/redshift/*`
-
-5. **DuckDB MCP Server**: DuckDB Model Context Protocol server
-   - Container: `agentx/mcp-duckdb`
-   - Port: 8000
-   - Path: `/mcp-server/duckdb/*`
-
-6. **OpenSearch MCP Server**: OpenSearch Model Context Protocol server
-   - Container: `agentx/mcp-opensearch`
-   - Port: 3000
-   - Path: `/mcp-server/opensearch/*`
-
-## 🚀 Deployment Steps
+## Deployment Steps
 
 ### 1. Prerequisites
 
@@ -78,10 +62,6 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 aws ecr create-repository --repository-name agentx/be --region $AWS_REGION
 aws ecr create-repository --repository-name agentx/rt-agentcore --region $AWS_REGION
 aws ecr create-repository --repository-name agentx/fe --region $AWS_REGION
-aws ecr create-repository --repository-name agentx/mcp-mysql --region $AWS_REGION
-aws ecr create-repository --repository-name agentx/mcp-redshift --region $AWS_REGION
-aws ecr create-repository --repository-name agentx/mcp-duckdb --region $AWS_REGION
-aws ecr create-repository --repository-name agentx/mcp-opensearch --region $AWS_REGION
 ```
 
 #### Step 2: Build and Push Docker Images
@@ -118,34 +98,20 @@ aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --
 aws ecr describe-repositories --repository-names agentx/be --region $AWS_REGION || aws ecr create-repository --repository-name agentx/be --region $AWS_REGION
 aws ecr describe-repositories --repository-names agentx/rt-agentcore --region $AWS_REGION || aws ecr create-repository --repository-name agentx/rt-agentcore --region $AWS_REGION
 aws ecr describe-repositories --repository-names agentx/fe --region $AWS_REGION || aws ecr create-repository --repository-name agentx/fe --region $AWS_REGION
-aws ecr describe-repositories --repository-names agentx/mcp-mysql --region $AWS_REGION || aws ecr create-repository --repository-name agentx/mcp-mysql --region $AWS_REGION
-aws ecr describe-repositories --repository-names agentx/mcp-redshift --region $AWS_REGION || aws ecr create-repository --repository-name agentx/mcp-redshift --region $AWS_REGION
-aws ecr describe-repositories --repository-names agentx/mcp-duckdb --region $AWS_REGION || aws ecr create-repository --repository-name agentx/mcp-duckdb --region $AWS_REGION
-aws ecr describe-repositories --repository-names agentx/mcp-opensearch --region $AWS_REGION || aws ecr create-repository --repository-name agentx/mcp-opensearch --region $AWS_REGION
 
-# Build and push backend and agentcore runtime image
+# Build and push backend image
 cd be
 docker build --platform linux/amd64 -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/be:latest .
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/be:latest
 
-docker buildx build --platform linux/arm64 -f ./Dockerfile.agentcore -t $AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/agentx/rt-agentcore:latest  --load .
+# Build and push AgentCore runtime image
+docker buildx build --platform linux/arm64 -f ./Dockerfile.agentcore -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/rt-agentcore:latest --load .
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/rt-agentcore:latest
 
 # Build and push frontend
 cd ../fe
 docker build --platform linux/amd64 -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/fe:latest .
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/fe:latest
-
-# Build and push MySQL MCP server
-cd ../mcp/mysql
-docker build --platform linux/amd64 -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-mysql:latest .
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-mysql:latest
-
-# Build and push Redshift MCP server
-cd ../mcp/redshift
-docker build --platform linux/amd64 -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-redshift:latest .
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/agentx/mcp-redshift:latest
-
 ```
 
 #### Step 3: Deploy with CDK
@@ -161,14 +127,12 @@ chmod +x cdk/deploy.sh
 # Navigate to the CDK directory
 cd cdk
 
-# Deployment with Azure AD SSO and existing VPC (no MCP servers)
+# Basic deployment
+./deploy.sh --region us-west-2
+
+# Deployment with Azure AD SSO and existing VPC
 ./deploy.sh --region us-west-2 \
   --vpc-id vpc-12345678 \
-  --no-mysql-mcp \
-  --no-redshift-mcp \
-  --no-duckdb-mcp \
-  --no-opensearch-mcp \
-  --no-aws-db-mcp \
   --azure-client-id your-azure-client-id \
   --azure-tenant-id your-azure-tenant-id \
   --azure-client-secret your-azure-client-secret \
@@ -179,20 +143,14 @@ cd cdk
 Available options:
 - `--region REGION`: AWS region to deploy to (default: from AWS config or us-west-2)
 - `--vpc-id VPC_ID`: Use existing VPC ID instead of creating a new one
-- `--no-mysql-mcp`: Disable MySQL MCP server deployment
-- `--no-redshift-mcp`: Disable Redshift MCP server deployment
-- `--no-duckdb-mcp`: Disable DuckDB MCP server deployment
-- `--no-opensearch-mcp`: Disable OpenSearch MCP server deployment
-- `--no-aws-db-mcp`: Disable AWS DB MCP server deployment
-- `--aws-db-mcp-cpu CPU`: CPU units for AWS DB MCP server (256, 512, 1024, 2048, 4096, default: 1024)
-- `--aws-db-mcp-memory MEMORY`: Memory in MiB for AWS DB MCP server (default: 2048)
-- `--no-dynamodb-tables`: Disable creation of DynamoDB tables for agent and MCP services
+- `--no-dynamodb-tables`: Disable creation of DynamoDB tables for agent services
 - `--s3-bucket-name BUCKET`: S3 bucket name for file storage (default: agentx-files-bucket)
 - `--s3-file-prefix PREFIX`: S3 file prefix for file storage (default: agentx/files)
 - `--azure-client-id ID`: Azure AD Client ID for SSO (optional)
 - `--azure-tenant-id ID`: Azure AD Tenant ID for SSO (optional)
 - `--azure-client-secret SEC`: Azure AD Client Secret for SSO (optional)
 - `--jwt-secret-key KEY`: JWT Secret Key for token generation (optional, uses default if not provided)
+- `--service-api-key KEY`: Service API Key for Lambda authentication (optional, auto-generated if not provided)
 - `--help`: Display help message with all available options
 
 ##### Option B: Manual CDK Deployment
@@ -243,15 +201,21 @@ The CDK deployment creates the following DynamoDB tables with user authenticatio
 - **Sort Key**: `SK` (String)
 - **Purpose**: Stores chat session data and memory information for agent conversations, enabling persistent context across chat interactions
 
-**MCP and Advanced Features:**
+**Advanced Features:**
 
-#### HttpMCPTable (MCP server configurations)
+#### HttpMCPTable (HTTP MCP server configurations)
 - **Partition Key**: `user_id` (String)
 - **Sort Key**: `id` (String)
-- **Purpose**: Stores MCP server configurations with user isolation support
+- **Purpose**: Stores HTTP MCP server configurations with user isolation support
+
+#### RestAPIRegistryTable (REST API adapter configurations)
+- **Partition Key**: `user_id` (String)
+- **Sort Key**: `api_id` (String)
+- **Purpose**: Stores REST API configurations for integration with agents. Enables dynamic tool generation from external REST APIs without code modifications.
 
 #### AgentScheduleTable (Scheduled agent tasks)
-- **Partition Key**: `id` (String)
+- **Partition Key**: `user_id` (String)
+- **Sort Key**: `id` (String)
 - **Purpose**: Stores scheduled agent task configurations
 
 **Additional Tables** (used by orchestration and configuration features):
