@@ -1,164 +1,226 @@
 # AgentX Backend
 
-The backend component of the AgentX platform, built with FastAPI and the Strands framework.
+FastAPI-based backend server for the AgentX AI agent management platform, built on the [Strands Agents](https://github.com/strands-agents/strands-agents) framework.
 
-## 🌟 Features
+## Features
 
-- **Agent Management**: Create, list, get, and delete agents
-- **Chat Interface**: Stream chat with agents using WebSockets
-- **Schedule Management**: Create and manage scheduled agent tasks
-- **MCP Integration**: Connect with Model Context Protocol servers
-- **AWS Integration**: Interact with AWS services (DynamoDB, EventBridge, Lambda)
+- **Agent Management**: Create, configure, and manage AI agents with custom tools
+- **Real-time Chat**: WebSocket streaming for interactive agent conversations
+- **Schedule Management**: Create scheduled tasks using AWS EventBridge
+- **MCP Integration**: Connect Model Context Protocol servers to extend agent capabilities
+- **REST API Adapter**: Register external REST APIs as agent tools dynamically
+- **Agent Orchestration**: Coordinate multiple agents for complex workflows
+- **User Authentication**: JWT-based auth with optional Azure AD SSO
 
-## 🏗️ Architecture
-
-The backend is organized into the following modules:
-
-- **app/main.py**: Main FastAPI application entry point
-- **app/agent/**: Agent management and interaction logic
-- **app/routers/**: API route definitions
-- **app/mcp/**: Model Context Protocol integration
-- **app/schedule/**: Scheduling service for agent tasks
-
-## 🚀 Getting Started
+## Quick Start
 
 ### Prerequisites
 
 - Python 3.13+
-- uv (Python package manager)
-- AWS credentials (for AWS services)
+- [uv](https://github.com/astral-sh/uv) (Python package manager)
+- AWS credentials configured
+- DynamoDB tables created (see main README)
 
 ### Installation
 
-1. Install dependencies:
-   ```bash
-   uv sync
-   ```
-
-2. Set up environment variables:
-   ```bash
-   # AWS credentials
-   export AWS_ACCESS_KEY_ID=your_access_key
-   export AWS_SECRET_ACCESS_KEY=your_secret_key
-   export AWS_REGION=us-west-2
-   ```
+```bash
+cd be
+uv sync
+```
 
 ### Running the Server
 
-For development:
+**Development**
 ```bash
-uvicorn app.main:app --reload
+source .venv/bin/activate
+uvicorn app.main:app --reload --port 8000
 ```
 
-For production:
+**Production**
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-## 📚 API Documentation
+### Environment Variables
 
-Once the server is running, you can access the API documentation at:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+Create a `.env` file in the `be/` directory:
 
-### Key Endpoints
+```bash
+# AWS Configuration
+AWS_REGION=us-west-2
+# AWS_ACCESS_KEY_ID=your_key        # Optional if using IAM roles
+# AWS_SECRET_ACCESS_KEY=your_secret # Optional if using IAM roles
+
+# Authentication
+JWT_SECRET_KEY=your-secure-jwt-secret-key
+
+# Azure AD SSO (Optional)
+AZURE_CLIENT_ID=your-azure-client-id
+AZURE_TENANT_ID=your-azure-tenant-id
+AZURE_CLIENT_SECRET=your-azure-client-secret
+
+# File Storage
+S3_BUCKET_NAME=agentx-files-bucket
+S3_FILE_PREFIX=agentx/files
+
+# Scheduling (When deployed to AWS)
+LAMBDA_FUNCTION_ARN=arn:aws:lambda:region:account:function:name
+SCHEDULE_ROLE_ARN=arn:aws:iam::account:role/role-name
+
+# Service Authentication
+SERVICE_API_KEY=your-service-api-key
+```
+
+## API Documentation
+
+### API Endpoints
+
+#### User Authentication
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/user/register` | Register new user |
+| POST | `/api/user/login` | Login with username/password |
+| POST | `/api/user/azure-login` | Login with Azure AD token |
+| GET | `/api/user/profile` | Get current user profile |
 
 #### Agent Management
 
-- `GET /agent/list`: List all agents
-- `GET /agent/get/{agent_id}`: Get agent details
-- `POST /agent/create`: Create a new agent
-- `DELETE /agent/delete/{agent_id}`: Delete an agent
-- `POST /agent/stream_chat`: Stream chat with an agent
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/agent/list` | List all user's agents |
+| GET | `/api/agent/get/{agent_id}` | Get agent details |
+| POST | `/api/agent/create` | Create new agent |
+| PUT | `/api/agent/update/{agent_id}` | Update agent configuration |
+| DELETE | `/api/agent/delete/{agent_id}` | Delete agent |
+| POST | `/api/agent/stream_chat` | Stream chat with agent (WebSocket) |
+| POST | `/api/agent/async_chat` | Async chat (for scheduled tasks) |
+
+#### Chat Records
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/chat/list` | List chat sessions |
+| GET | `/api/chat/get/{chat_id}` | Get chat messages |
+| DELETE | `/api/chat/delete/{chat_id}` | Delete chat session |
 
 #### Schedule Management
 
-- `GET /schedule/list`: List all schedules
-- `POST /schedule/create`: Create a new schedule
-- `PUT /schedule/update/{schedule_id}`: Update a schedule
-- `DELETE /schedule/delete/{schedule_id}`: Delete a schedule
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/schedule/list` | List all schedules |
+| POST | `/api/schedule/create` | Create new schedule |
+| PUT | `/api/schedule/update/{id}` | Update schedule |
+| DELETE | `/api/schedule/delete/{id}` | Delete schedule |
+| POST | `/api/schedule/toggle/{id}` | Enable/disable schedule |
 
-#### MCP Management
+#### MCP Server Management
 
-- `GET /mcp/list`: List all MCP servers
-- `POST /mcp/add`: Add a new MCP server
-- `DELETE /mcp/delete/{mcp_id}`: Delete an MCP server
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/mcp/list` | List MCP servers |
+| POST | `/api/mcp/add` | Add MCP server |
+| PUT | `/api/mcp/update/{id}` | Update MCP server |
+| DELETE | `/api/mcp/delete/{id}` | Delete MCP server |
+| GET | `/api/mcp/tools/{id}` | Get available tools |
 
-## 🧩 Agent Types
+#### REST API Adapter
 
-### Plain Agent
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/rest-apis` | List REST APIs |
+| POST | `/api/rest-apis` | Register REST API |
+| GET | `/api/rest-apis/{id}` | Get REST API details |
+| PUT | `/api/rest-apis/{id}` | Update REST API |
+| DELETE | `/api/rest-apis/{id}` | Delete REST API |
+| POST | `/api/rest-apis/{id}/test` | Test endpoint |
 
-Standard agent with tools:
-- RAG & Memory tools
-- FileOps tools
-- Web & Network tools
-- Multi-modal tools
-- AWS Services tools
-- Utility tools
+#### Orchestration
 
-### Orchestrator Agent
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/orchestration/list` | List workflows |
+| POST | `/api/orchestration/create` | Create workflow |
+| PUT | `/api/orchestration/update/{id}` | Update workflow |
+| DELETE | `/api/orchestration/delete/{id}` | Delete workflow |
+| POST | `/api/orchestration/execute/{id}` | Execute workflow |
+| GET | `/api/orchestration/executions` | List executions |
 
-Agent that can coordinate with other agents:
+#### File Management
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/files/upload` | Upload file to S3 |
+| GET | `/api/files/download/{key}` | Download file |
+| DELETE | `/api/files/delete/{key}` | Delete file |
+
+## Agent Configuration
+
+### Agent Types
+
+**Standard Agent**
+- Uses Strands Agents framework
+- Configurable system prompt
+- Selectable tools from the tool library
+- Multiple LLM provider support
+
+**Orchestrator Agent**
+- Coordinates multiple agents
 - Can use other agents as tools
-- Can delegate tasks to specialized agents
-- Can aggregate results from multiple agents
+- Supports complex multi-step workflows
 
-## 🔧 Configuration
+### Built-in Tools
 
-The backend can be configured through environment variables:
+The platform provides 50+ built-in tools categorized as:
 
-- `AWS_REGION`: AWS region for services (default: us-west-2)
-- `DYNAMODB_ENDPOINT`: Custom DynamoDB endpoint (optional)
-- `EVENTBRIDGE_ENDPOINT`: Custom EventBridge endpoint (optional)
-- `LAMBDA_FUNCTION_ARN`: ARN for the Lambda function (for scheduling)
-- `SCHEDULE_ROLE_ARN`: ARN for the EventBridge scheduler role
+- **RAG & Memory**: Vector search, document retrieval, conversation memory
+- **File Operations**: Read, write, list files
+- **Web & Network**: HTTP requests, web scraping
+- **Image Generation**: AI image creation
+- **Code Execution**: Python, shell command execution
+- **AWS Services**: S3, DynamoDB, Lambda interactions
+- **Browser Automation**: AgentCore browser tools
+- **Utilities**: Calculator, date/time, JSON processing
 
-## 🛠️ Development
+## Authentication
 
-### Project Structure
+### JWT Authentication
 
-```
-be/
-├── app/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── agent/
-│   │   ├── __init__.py
-│   │   ├── agent.py
-│   │   └── event_models.py
-│   ├── mcp/
-│   │   ├── __init__.py
-│   │   └── mcp.py
-│   ├── routers/
-│   │   ├── __init__.py
-│   │   ├── agent.py
-│   │   ├── chat_record.py
-│   │   ├── mcp.py
-│   │   └── schedule.py
-│   └── schedule/
-│       ├── __init__.py
-│       ├── models.py
-│       └── service.py
-├── Dockerfile
-├── pyproject.toml
-└── README.md
-```
+All API endpoints (except `/user/register` and `/user/login`) require JWT authentication:
 
-### Testing
-
-Run tests with:
 ```bash
-pytest
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" http://localhost:8000/api/agent/list
 ```
 
-## 📦 Deployment
+### Service API Key
 
-For deployment instructions, see the [main deployment guide](../README-DEPLOYMENT.md).
+Lambda functions use API key authentication:
 
-## 🔗 Dependencies
+```bash
+curl -H "X-API-Key: YOUR_SERVICE_API_KEY" http://localhost:8000/api/agent/async_chat
+```
 
-- **FastAPI**: Web framework for building APIs
-- **Strands**: Framework for building AI agents
-- **Boto3**: AWS SDK for Python
-- **Pydantic**: Data validation and settings management
-- **WebSockets**: For streaming chat responses
+### Azure AD SSO
+
+When configured, users can authenticate via Azure AD:
+
+1. Frontend redirects to Azure AD login
+2. User authenticates with Microsoft credentials
+3. Frontend sends tokens to `/api/user/azure-login`
+4. Backend validates tokens and issues JWT
+
+## Deployment
+
+For full AWS deployment, see the [Deployment Guide](../README-DEPLOYMENT.md).
+
+## Dependencies
+
+Key dependencies from `pyproject.toml`:
+
+- **fastapi**: Web framework
+- **strands-agents**: AI agent framework
+- **strands-agents-tools**: Tool library
+- **boto3**: AWS SDK
+- **pyjwt**: JWT token handling
+- **websockets**: WebSocket support
+- **uvicorn**: ASGI server
