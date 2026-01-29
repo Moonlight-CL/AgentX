@@ -1,6 +1,6 @@
 # AgentX - AI Agent Management Platform
 
-AgentX is an enterprise-grade AI agent management platform built on the [Strands Agents](https://github.com/strands-agents/strands-agents) framework. It enables you to create, manage, and orchestrate AI agents with various tools and capabilities.
+AgentX is an AI agent management platform built on the [Strands Agents](https://github.com/strands-agents/strands-agents) framework. It enables you to create, manage, and orchestrate AI agents with various tools and capabilities.
 
 **Core Principle**: `Agent = LLM Model + System Prompt + Tools + Environment`
 
