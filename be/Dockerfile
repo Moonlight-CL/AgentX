@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir uv
 # Copy project files
 COPY pyproject.toml README.md ./
 COPY app/ ./app/
+COPY db/ ./db/
 
 # Install dependencies
 # RUN pip install --no-cache-dir .

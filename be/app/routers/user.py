@@ -2,10 +2,10 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
 from typing import List
 from pydantic import BaseModel
-from ..user.models import User, UserCreate, UserLogin, UserUpdate, UserService
+from ..user.models import User, UserCreate, UserLogin, UserUpdate
 from ..user.auth import JWTAuth, get_current_user, AuthMiddleware
 from ..user.azure_auth import azure_auth
-from ..config.config import ConfigService
+from ..storage.factory import get_user_service, get_config_service
 
 router = APIRouter(
     prefix="/user",
@@ -13,8 +13,8 @@ router = APIRouter(
     responses={404: {"description": "Not found"}}
 )
 
-user_service = UserService()
-config_service = ConfigService()
+user_service = get_user_service()
+config_service = get_config_service()
 
 class AzureLoginRequest(BaseModel):
     access_token: str

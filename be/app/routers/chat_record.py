@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 from typing import List
 
-from ..agent.agent import ChatRecord, ChatResponse, ChatRecordService
+from ..agent.agent import ChatRecord, ChatResponse
+from ..storage.factory import get_chat_record_service
 from ..user.auth import get_current_user
 
 router = APIRouter(
@@ -10,7 +11,7 @@ router = APIRouter(
     responses={404: {"description": "Not found"}}
 )
 
-chat_service = ChatRecordService()
+chat_service = get_chat_record_service()
 
 
 # List top 100 Chat Records for current user

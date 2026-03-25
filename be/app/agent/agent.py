@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import boto3, uuid
 import importlib
 import json
@@ -564,7 +566,8 @@ class AgentPOService:
                 tools.append(AgentTool(name=agent.name, display_name=agent.name, category="Agent", desc=agent.description, type=AgentToolType.agent, agent_id=agent.id))
 
         # Add MCP tools
-        mcpService = MCPService()
+        from ..storage.factory import get_mcp_service as _get_mcp_service
+        mcpService = _get_mcp_service()
         for mcp in mcpService.list_mcp_servers(user_id):
             tools.append(AgentTool(
                 name=mcp.name, 
@@ -578,12 +581,12 @@ class AgentPOService:
         
         # Add REST API tools
         try:
-            from ..services.rest_api_registry import RestAPIRegistry
+            from ..storage.factory import get_rest_api_registry as _get_rest_api_registry
             import asyncio
-            
+
             print(f"Loading REST API tools for user: {user_id}")
-            registry = RestAPIRegistry()
-            rest_apis = asyncio.run(registry.get_user_apis(user_id))
+            registry = _get_rest_api_registry()
+            rest_apis = registry.get_user_apis_sync(user_id)
             print(f"Found {len(rest_apis)} REST APIs")
             
             for api in rest_apis:
@@ -616,8 +619,9 @@ class AgentPOService:
         :param user_id: Optional user_id for loading REST API tools
         :return: A Strands Agent instance with session management.
         """
-        # Create DynamoDB session repository
-        session_repository = DynamoDBSessionRepository()
+        # Create session repository (backend selected by factory)
+        from ..storage.factory import get_session_repository
+        session_repository = get_session_repository()
         
         # Create session manager
         session_manager = RepositorySessionManager(
@@ -729,20 +733,17 @@ class AgentPOService:
                 if '.' in t.name and not t.mcp_server_url:
                     # This is a REST API tool
                     try:
-                        from ..services.rest_api_registry import RestAPIRegistry
                         from ..services.rest_mcp_adapter import RestMCPAdapter
-                        
+
                         api_name, tool_name = t.name.split('.', 1)
-                        registry = RestAPIRegistry()
-                        
+
                         # Get user_id from kwargs or use 'public'
                         user_id = kwargs.get('user_id', 'public')
-                        
-                        # Use synchronous DynamoDB query
-                        response = registry.table.query(
-                            KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(user_id)
-                        )
-                        apis = response.get('Items', [])
+
+                        # Use backend-agnostic sync query
+                        from ..storage.factory import get_rest_api_registry
+                        registry = get_rest_api_registry()
+                        apis = registry.get_user_apis_sync(user_id)
                         
                         for api in apis:
                             if api['name'] == api_name:
@@ -764,7 +765,8 @@ class AgentPOService:
                     print(f"[MCP] URL: {t.mcp_server_url}")
                     
                     # Get MCP server configuration to check for OAuth settings
-                    mcp_service = MCPService()
+                    from ..storage.factory import get_mcp_service
+                    mcp_service = get_mcp_service()
                     user_id = kwargs.get('user_id', 'public')
                     mcp_servers = mcp_service.list_mcp_servers(user_id)
                     

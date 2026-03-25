@@ -1,11 +1,12 @@
 
 from fastapi import APIRouter, Request, Depends
 
-from ..mcp.mcp import HttpMCPServer, MCPService
+from ..mcp.mcp import HttpMCPServer
 from ..user.auth import get_current_user
+from ..storage.factory import get_mcp_service
 
 
-mcp_service = MCPService()
+mcp_service = get_mcp_service()
 
 router = APIRouter(
     prefix="/mcp",

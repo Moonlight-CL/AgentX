@@ -5,12 +5,12 @@ import uuid
 from app.models.rest_api import (
     RestAPICreate, RestAPIUpdate, RestAPIResponse, TestEndpointRequest
 )
-from app.services.rest_api_registry import RestAPIRegistry
 from app.services.rest_mcp_adapter import RestMCPAdapter
 from app.user.auth import get_current_user
+from app.storage.factory import get_rest_api_registry
 
 router = APIRouter(prefix="/rest-apis", tags=["rest-apis"])
-registry = RestAPIRegistry()
+registry = get_rest_api_registry()
 
 
 @router.post("", response_model=RestAPIResponse)

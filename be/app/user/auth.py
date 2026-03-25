@@ -4,8 +4,9 @@ from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from .models import TokenData, UserService
+from .models import TokenData
 from .azure_auth import azure_auth
+from ..storage.factory import get_user_service
 
 # JWT Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production")
@@ -13,7 +14,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60  # 30 days
 
 security = HTTPBearer()
-user_service = UserService()
+user_service = get_user_service()
 
 class JWTAuth:
     """JWT Authentication utilities."""

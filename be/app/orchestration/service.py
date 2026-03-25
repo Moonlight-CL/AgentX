@@ -749,8 +749,9 @@ class OrchestrationService:
     ) -> Dict[str, Any]:
         """Execute a Swarm orchestration."""
         from strands.multiagent import Swarm
+        from ..storage.factory import get_agent_service
 
-        agent_service = AgentPOService()
+        agent_service = get_agent_service()
         # Get user id from execution, and use it as agent id, possibly this would be changed later
         user_id = execution.userId
 
@@ -811,8 +812,9 @@ class OrchestrationService:
     ) -> Dict[str, Any]:
         """Execute a Graph orchestration using GraphBuilder."""
         from strands.multiagent import GraphBuilder
+        from ..storage.factory import get_agent_service
 
-        agent_service = AgentPOService()
+        agent_service = get_agent_service()
         user_id = execution.userId
         # Build agents from nodes
         agents = {}
@@ -892,8 +894,9 @@ class OrchestrationService:
     ) -> Dict[str, Any]:
         """Execute a Workflow orchestration with sequential agent execution."""
         import time
+        from ..storage.factory import get_agent_service
 
-        agent_service = AgentPOService()
+        agent_service = get_agent_service()
         user_id = execution.userId
 
         # Build agents from nodes
@@ -1009,8 +1012,9 @@ class OrchestrationService:
         """Execute Agents as Tools orchestration with orchestrator and tool agents."""
         from strands import Agent
         import time
+        from ..storage.factory import get_agent_service
 
-        agent_service = AgentPOService()
+        agent_service = get_agent_service()
         user_id = execution.userId
 
         # Get orchestrator agent

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
-from ..config.config import ConfigService
 from ..config.models import (
-    CreateConfigRequest, 
+    CreateConfigRequest,
     UpdateConfigRequest,
     ConfigResponse,
     ConfigListResponse,
@@ -9,11 +8,12 @@ from ..config.models import (
     ModelProviderRequest
 )
 from ..user.auth import get_current_user
+from ..storage.factory import get_config_service
 
 router = APIRouter(prefix="/config", tags=["config"])
 
 # Initialize config service
-config_service = ConfigService()
+config_service = get_config_service()
 
 @router.post("/create", response_model=ConfigResponse)
 async def create_config(

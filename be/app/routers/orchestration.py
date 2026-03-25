@@ -4,16 +4,16 @@ import asyncio
 from fastapi import APIRouter, Request, BackgroundTasks, HTTPException
 from fastapi.responses import JSONResponse
 
-from ..orchestration.service import OrchestrationService
 from ..orchestration.models import (
-    OrchestrationConfig, 
-    OrchestrationExecution, 
-    ExecutionRequest, 
+    OrchestrationConfig,
+    OrchestrationExecution,
+    ExecutionRequest,
     ExecutionResponse
 )
+from ..storage.factory import get_orchestration_service
 
 # Initialize services
-orchestration_service = OrchestrationService()
+orchestration_service = get_orchestration_service()
 
 router = APIRouter(
     prefix="/orchestration",

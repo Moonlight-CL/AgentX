@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 import os
@@ -14,7 +15,20 @@ from .routers import rest_api
 from .middleware.auth_middleware import AuthMiddleware, AuthConfig
 from .routers.agentcore_handler import AgentCoreInvocationHandler
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if os.environ.get("STORAGE_BACKEND", "dynamodb") == "postgresql":
+        from .utils.pg_config import init_pg_pool
+        from .db_init import init_pg_schema
+        init_pg_pool()
+        init_pg_schema()
+    yield
+    if os.environ.get("STORAGE_BACKEND", "dynamodb") == "postgresql":
+        from .utils.pg_config import close_pg_pool
+        close_pg_pool()
+
+
+app = FastAPI(lifespan=lifespan)
 
 # Add authentication middleware
 app.add_middleware(AuthMiddleware, public_paths=AuthConfig.get_public_paths())

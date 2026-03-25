@@ -1,20 +1,20 @@
-
 import uuid
 import boto3
+from typing import Optional, Dict
 from pydantic import BaseModel
 from ..utils.aws_config import get_aws_region, get_dynamodb_resource, get_http_mcp_table
 
 class HttpMCPServer(BaseModel):
-   id: str | None = None
+   id: Optional[str] = None
    name: str
    desc: str
    host: str
-   headers: dict[str, str] | None = None
+   headers: Optional[Dict[str, str]] = None
    # OAuth Client Credentials Flow fields
-   client_id: str | None = None
-   client_secret: str | None = None
-   token_url: str | None = None
-   scope: str | None = None
+   client_id: Optional[str] = None
+   client_secret: Optional[str] = None
+   token_url: Optional[str] = None
+   scope: Optional[str] = None
 
 
 class MCPService:
@@ -55,7 +55,7 @@ class MCPService:
             item['scope'] = server.scope
         self.mcp_table.put_item(Item=item)
 
-    def list_mcp_servers(self, user_id: str) -> list[HttpMCPServer]:
+    def list_mcp_servers(self, user_id: str) -> list:
         """
         List MCP servers for a specific user from Amazon DynamoDB.
         Includes both user-specific and public servers.
@@ -78,7 +78,7 @@ class MCPService:
         return self.mcp_servers
         
 
-    def get_mcp_server(self, user_id: str, id: str) -> HttpMCPServer | None:
+    def get_mcp_server(self, user_id: str, id: str) -> Optional[HttpMCPServer]:
         """
         Retrieve an MCP server by its ID from Amazon DynamoDB.
         Checks both user-specific and public data.

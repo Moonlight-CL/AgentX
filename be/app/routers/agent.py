@@ -8,11 +8,12 @@ from dataclasses import dataclass
 from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import List, Dict, Optional, AsyncGenerator
-from ..agent.agent import AgentPO, AgentType, ModelProvider, AgentTool, AgentRuntime, AgentPOService, ChatRecord, ChatRecordService
+from ..agent.agent import AgentPO, AgentType, ModelProvider, AgentTool, AgentRuntime, ChatRecord
 from ..agent.event_serializer import EventSerializer
 from ..utils.content_converter import ContentConverter
 from ..user.auth import get_current_user
 from ..utils.aws_config import get_aws_region
+from ..storage.factory import get_agent_service, get_chat_record_service
 
 @dataclass
 class ChatRequestData:
@@ -28,8 +29,8 @@ class ChatRequestData:
     use_s3_reference: bool
     agent_owner_id: Optional[str]  # Owner ID for shared agents
 
-agent_service = AgentPOService()
-chat_reccord_service = ChatRecordService()
+agent_service = get_agent_service()
+chat_reccord_service = get_chat_record_service()
 
 router = APIRouter(
     prefix="/agent",

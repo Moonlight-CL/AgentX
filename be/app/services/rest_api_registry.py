@@ -49,3 +49,8 @@ class RestAPIRegistry:
         self.table.delete_item(
             Key={'user_id': user_id, 'api_id': api_id}
         )
+
+    def get_user_apis_sync(self, user_id: str) -> list:
+        """Synchronous version of get_user_apis for use in non-async contexts."""
+        response = self.table.query(KeyConditionExpression=Key('user_id').eq(user_id))
+        return response.get('Items', [])

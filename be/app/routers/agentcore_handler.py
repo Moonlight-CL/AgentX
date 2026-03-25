@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import Dict, Optional, AsyncGenerator
 import uuid
 
-from ..agent.agent import AgentPOService, ChatRecord, ChatRecordService
+from ..agent.agent import ChatRecord
+from ..storage.factory import get_agent_service, get_chat_record_service
 from ..agent.event_serializer import EventSerializer
 
 
@@ -14,8 +15,8 @@ class AgentCoreInvocationHandler:
     """Handler for AgentCore Runtime invocation requests."""
 
     def __init__(self):
-        self.agent_service = AgentPOService()
-        self.chat_record_service = ChatRecordService()
+        self.agent_service = get_agent_service()
+        self.chat_record_service = get_chat_record_service()
 
     async def parse_invocation_request(self, data: dict) -> Dict:
         """
