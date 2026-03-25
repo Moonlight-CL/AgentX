@@ -578,6 +578,55 @@ Common causes:
 
 ---
 
+## Reusing an Existing ALB (IngressGroup)
+
+If you already have an ALB created by the AWS Load Balancer Controller, AgentX can share it instead of creating a new one. This is done via the **IngressGroup** mechanism.
+
+### How It Works
+
+ALB Controller uses the `alb.ingress.kubernetes.io/group.name` annotation to determine which Ingress resources share the same ALB. Ingress resources with the **same `group.name`** are merged into a single ALB as separate listener rules.
+
+By default, AgentX uses `group.name: agentx`, which creates a **dedicated ALB**. To share an existing ALB, change this to match the existing group name.
+
+### Step 1: Find the Existing Group Name
+
+```bash
+kubectl get ingress --all-namespaces \
+  -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}: {.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.name}{"\n"}{end}'
+```
+
+### Step 2: Patch in Overlay
+
+Add the following patch to your overlay `kustomization.yaml` (e.g., `k8s/overlays/dev/kustomization.yaml`):
+
+```yaml
+# Reuse existing ALB by joining its IngressGroup
+- target:
+    kind: Ingress
+    name: agentx-ingress
+  patch: |
+    - op: replace
+      path: /metadata/annotations/alb.ingress.kubernetes.io~1group.name
+      value: "shared-alb"
+    - op: replace
+      path: /metadata/annotations/alb.ingress.kubernetes.io~1group.order
+      value: "10"
+```
+
+Replace `shared-alb` with the actual group name from Step 1. The `group.order` controls rule priority (lower number = higher priority) — choose a value that doesn't conflict with existing rules.
+
+### Important Considerations
+
+| Concern | Detail |
+|---------|--------|
+| **idle_timeout=900s** | This is an ALB-level setting. If AgentX sets it, it applies to **all services** sharing the ALB. If other services can't tolerate 900s idle timeout, keep AgentX on a separate ALB. |
+| **ALB-level annotations** | `scheme`, `certificate-arn`, `load-balancer-attributes` etc. are shared across the group. The first Ingress in the group sets these; others should be consistent or omit them. |
+| **SSL certificates** | A shared ALB supports multiple ACM certificates via SNI. Use comma-separated ARNs: `"arn:...cert1,arn:...cert2"` |
+| **Host-based isolation** | AgentX uses its own domain in the `host` field, so routing rules won't conflict with other services on the same ALB. |
+| **When NOT to share** | If your SSE streaming requires 900s idle timeout and other services need the default 60s, use a separate ALB (the default `group.name: agentx` configuration). |
+
+---
+
 ## Updating the Application
 
 ```bash
