@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agentx-frontend-config
+  namespace: agentx
+  labels:
+    app.kubernetes.io/name: agentx-frontend
+    app.kubernetes.io/component: frontend
+data:
+  # Azure AD runtime injection (used by docker-entrypoint.sh -> env-config.js)
+  VITE_AZURE_CLIENT_ID: ""
+  VITE_AZURE_TENANT_ID: ""
+  VITE_AZURE_AUTHORITY: ""
+  VITE_AZURE_REDIRECT_URI: ""
+  VITE_AZURE_POST_LOGOUT_REDIRECT_URI: ""

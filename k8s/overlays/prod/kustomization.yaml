@@ -1,0 +1,60 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Prod image tags - use semantic versioning, never 'latest'
+images:
+  - name: agentx/be
+    newName: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/agentx/be
+    newTag: v1.0.0
+  - name: agentx/fe
+    newName: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/agentx/fe
+    newTag: v1.0.0
+
+patches:
+  # ServiceAccount: IRSA role ARN for prod
+  - target:
+      kind: ServiceAccount
+      name: agentx-backend-sa
+    patch: |
+      - op: replace
+        path: /metadata/annotations/eks.amazonaws.com~1role-arn
+        value: "arn:aws:iam::<ACCOUNT_ID>:role/agentx-backend-irsa-role"
+  # Backend: higher resource requests for prod
+  - target:
+      kind: Deployment
+      name: agentx-backend
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+  # Ingress: prod domain and certificate
+  - target:
+      kind: Ingress
+      name: agentx-ingress
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: <PROD_DOMAIN>
+      - op: replace
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1certificate-arn
+        value: "<ACM_CERTIFICATE_ARN>"
+  # ConfigMap: prod-specific values
+  - target:
+      kind: ConfigMap
+      name: agentx-backend-config
+    patch: |
+      - op: replace
+        path: /data/AWS_REGION
+        value: "<REGION>"
+      - op: replace
+        path: /data/S3_BUCKET_NAME
+        value: "<S3_BUCKET_NAME>"

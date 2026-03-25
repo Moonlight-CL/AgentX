@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agentx
+
+resources:
+  - namespace.yaml
+  # Backend
+  - backend/serviceaccount.yaml
+  - backend/configmap.yaml
+  - backend/deployment.yaml
+  - backend/service.yaml
+  - backend/hpa.yaml
+  # Frontend
+  - frontend/configmap.yaml
+  - frontend/deployment.yaml
+  - frontend/service.yaml
+  - frontend/hpa.yaml
+  # Secrets
+  - secrets/secrets.yaml
+  # Ingress
+  - ingress/ingress.yaml
+  # Network Policies
+  - network-policies/backend-netpol.yaml
+  - network-policies/frontend-netpol.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: agentx
+  app.kubernetes.io/managed-by: kustomize

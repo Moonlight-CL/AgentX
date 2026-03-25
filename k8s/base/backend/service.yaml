@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentx-backend
+  namespace: agentx
+  labels:
+    app.kubernetes.io/name: agentx-backend
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: agentx
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: agentx-backend

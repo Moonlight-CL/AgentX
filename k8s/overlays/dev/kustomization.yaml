@@ -1,0 +1,97 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Dev image tags - replace ACCOUNT_ID and REGION with actual values
+images:
+  - name: agentx/be
+    newName: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/agentx/be
+    newTag: dev-latest
+  - name: agentx/fe
+    newName: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/agentx/fe
+    newTag: dev-latest
+
+patches:
+  # ServiceAccount: IRSA role ARN for dev
+  - target:
+      kind: ServiceAccount
+      name: agentx-backend-sa
+    patch: |
+      - op: replace
+        path: /metadata/annotations/eks.amazonaws.com~1role-arn
+        value: "arn:aws:iam::<ACCOUNT_ID>:role/agentx-backend-irsa-role"
+  # Backend: reduce replicas for dev
+  - target:
+      kind: Deployment
+      name: agentx-backend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  # Frontend: single replica for dev
+  - target:
+      kind: Deployment
+      name: agentx-frontend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  # Backend: lower resource requests for dev
+  - target:
+      kind: Deployment
+      name: agentx-backend
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+  # HPA: lower min/max for dev
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: agentx-backend-hpa
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 4
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: agentx-frontend-hpa
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+  # Ingress: dev domain and certificate
+  - target:
+      kind: Ingress
+      name: agentx-ingress
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: <DEV_DOMAIN>
+      - op: replace
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1certificate-arn
+        value: "<ACM_CERTIFICATE_ARN>"
+  # ConfigMap: dev-specific values
+  - target:
+      kind: ConfigMap
+      name: agentx-backend-config
+    patch: |
+      - op: replace
+        path: /data/AWS_REGION
+        value: "<REGION>"
+      - op: replace
+        path: /data/S3_BUCKET_NAME
+        value: "<S3_BUCKET_NAME>"

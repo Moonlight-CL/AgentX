@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentx-frontend
+  namespace: agentx
+  labels:
+    app.kubernetes.io/name: agentx-frontend
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: agentx
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentx-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentx-frontend
+        app.kubernetes.io/component: frontend
+        app.kubernetes.io/part-of: agentx
+    spec:
+      containers:
+        - name: frontend
+          image: agentx/fe:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              protocol: TCP
+              name: http
+          envFrom:
+            - configMapRef:
+                name: agentx-frontend-config
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 3
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: agentx-frontend

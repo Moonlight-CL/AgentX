@@ -90,3 +90,9 @@ cdk.context.json
 
 # Claude Code
 .mcp.json
+.claude
+.agents
+
+# K8s secrets (contains real credentials)
+k8s/base/secrets/secrets.yaml
+k8s/overlays/*/secrets.env
