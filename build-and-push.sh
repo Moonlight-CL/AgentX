@@ -30,8 +30,9 @@ print_error() {
 # Check if AWS region is provided
 if [ -z "$1" ]; then
   print_error "AWS region is required"
-  echo "Usage: $0 <aws-region> [aws-account-id]"
-  echo "Example: $0 us-east-1 123456789012"
+  echo "Usage: $0 <aws-region> [aws-account-id] [image-tag]"
+  echo "Example: $0 us-east-1 123456789012 v1.0.0"
+  echo "         $0 us-east-1 123456789012           # defaults to git short SHA"
   exit 1
 fi
 
@@ -50,6 +51,14 @@ else
   AWS_ACCOUNT_ID=$2
   print_status "Using provided AWS Account ID: ${AWS_ACCOUNT_ID}"
 fi
+
+# Image tag: use provided tag, or default to git short SHA
+if [ -n "$3" ]; then
+  IMAGE_TAG=$3
+else
+  IMAGE_TAG=$(git rev-parse --short HEAD 2>/dev/null || echo "latest")
+fi
+print_status "Image tag: ${IMAGE_TAG}"
 
 # ECR registry URL
 ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
@@ -81,8 +90,10 @@ build_and_push() {
   create_repository "${repo_name}"
   
   cd "${build_path}"
-  docker build --platform linux/arm64 -t "${image_name}" .
-  docker tag "${image_name}:latest" "${ECR_REGISTRY}/${repo_name}:latest"
+  docker build --platform linux/arm64 -t "${image_name}:${IMAGE_TAG}" .
+  docker tag "${image_name}:${IMAGE_TAG}" "${ECR_REGISTRY}/${repo_name}:${IMAGE_TAG}"
+  docker tag "${image_name}:${IMAGE_TAG}" "${ECR_REGISTRY}/${repo_name}:latest"
+  docker push "${ECR_REGISTRY}/${repo_name}:${IMAGE_TAG}"
   docker push "${ECR_REGISTRY}/${repo_name}:latest"
   cd - > /dev/null
   
@@ -133,7 +144,13 @@ echo "2. npm install"
 echo "3. cdk bootstrap (if not already done)"
 echo "4. cdk deploy"
 echo ""
-print_status "Available ECR repositories:"
-echo "- ${ECR_REGISTRY}/agentx/be:latest"
-echo "- ${ECR_REGISTRY}/agentx/fe:latest"
-echo "- ${ECR_REGISTRY}/agentx/rt-agentcore:latest"
+print_status "Available ECR images:"
+echo "- ${ECR_REGISTRY}/agentx/be:${IMAGE_TAG}"
+echo "- ${ECR_REGISTRY}/agentx/fe:${IMAGE_TAG}"
+echo "- ${ECR_REGISTRY}/agentx/rt-agentcore:${IMAGE_TAG} (if built)"
+echo ""
+print_status "To deploy to EKS:"
+echo "1. cd k8s/overlays/<env>"
+echo "2. kustomize edit set image agentx/be=${ECR_REGISTRY}/agentx/be:${IMAGE_TAG}"
+echo "3. kustomize edit set image agentx/fe=${ECR_REGISTRY}/agentx/fe:${IMAGE_TAG}"
+echo "4. kubectl apply -k ."
