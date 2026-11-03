@@ -3,7 +3,7 @@ name = "aws-db"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "boto3>=1.40.16",
     "mcp>=1.13.1",
@@ -31,7 +31,7 @@ ignore = []
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py313"
 
 [tool.uv]
 dev-dependencies = ["pyright>=1.1.378", "pytest>=8.3.3", "ruff>=0.6.9"]
